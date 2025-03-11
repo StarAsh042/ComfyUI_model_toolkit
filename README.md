@@ -1,8 +1,9 @@
 # ComfyUI 模型工具包 (Model Toolkit)
 
 这是一个用于ComfyUI的模型工具包插件，提供了一套完整的模型分析和修改工具。
-
+![ComfyUI_model_toolkit](https://github.com/user-attachments/assets/c58d0731-56ef-46e8-a85a-ad1f92ad4b52)
 ## Todo List 📝
+
 
 ### 已完成 ✅
 - [x] 实现基础模型分析功能，支持SD1.x/SD2.x/SDXL架构检测
@@ -122,7 +123,7 @@ safetensors>=0.3.0
 1. 将此仓库克隆或下载到ComfyUI的`custom_nodes`目录：
    ```bash
    cd custom_nodes
-   git clone https://github.com/yourusername/ComfyUI_model_toolkit.git
+   git clone https://github.com/StarAsh042/ComfyUI_model_toolkit.git
    ```
 2. 安装依赖（如果尚未安装）：
    ```bash
