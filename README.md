@@ -174,4 +174,7 @@ safetensors>=0.3.0
 
 - 如果图表无法正常显示，请确保已安装matplotlib和Pillow库
 - 如果节点无法加载，请检查ComfyUI日志中的错误信息
-- 对于大型SDXL模型，分析可能需要较长时间和更多内存 
+- 对于大型SDXL模型，分析可能需要较长时间和更多内存
+
+## 许可
+[MIT License](LICENSE)
