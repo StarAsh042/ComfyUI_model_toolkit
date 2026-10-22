@@ -48,9 +48,9 @@ EXPECTED = {
         "output_node": False,
         "has_is_changed": True,
         "inputs": [
-            ("required", "模型", "folder:checkpoints", None, None, None),
-            ("required", "显示细节", "choices", ["基础", "高级"], "基础", None),
-            ("required", "显示图表", "BOOLEAN", None, True, None),
+            ("required", "model_name", "folder:checkpoints", None, None, None),
+            ("required", "show_details", "choices", ["基础", "高级"], "基础", None),
+            ("required", "show_charts", "BOOLEAN", None, True, None),
         ],
     },
     "ComponentExtractor": {

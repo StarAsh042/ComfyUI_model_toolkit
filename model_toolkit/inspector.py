@@ -27,9 +27,9 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "模型": (folder_paths.get_filename_list("checkpoints"),),
-                "显示细节": (["基础", "高级"], {"default": "基础"}),
-                "显示图表": ("BOOLEAN", {"default": True})
+                "model_name": (folder_paths.get_filename_list("checkpoints"),),
+                "show_details": (["基础", "高级"], {"default": "基础"}),
+                "show_charts": ("BOOLEAN", {"default": True})
             }
         }
     
@@ -38,18 +38,18 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
     FUNCTION = "analyze_model"
 
     @classmethod
-    def IS_CHANGED(cls, 模型, 显示细节, 显示图表):
+    def IS_CHANGED(cls, model_name, show_details, show_charts):
         """模型文件内容变化时让 ComfyUI 重跑（mtime+大小指纹）。
 
         节点只在文件名相同的输入下才会命中缓存，而文件名不变、内容被替换
         （重新下载 / 覆盖同名模型）时旧实现会一直返回旧报告（T10）。
         """
-        return ModelUtils.model_fingerprint(folder_paths.get_full_path("checkpoints", 模型))
+        return ModelUtils.model_fingerprint(folder_paths.get_full_path("checkpoints", model_name))
 
-    def analyze_model(self, 模型, 显示细节, 显示图表):
+    def analyze_model(self, model_name, show_details, show_charts):
         """分析模型结构(主方法)"""
         try:
-            model_path = folder_paths.get_full_path("checkpoints", 模型)
+            model_path = folder_paths.get_full_path("checkpoints", model_name)
             # 只读头部即可完成分析（P4）：不把权重读进内存
             model_data = ModelUtils.load_model_index(model_path)
 
@@ -57,7 +57,7 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                 return ("❌ 无法加载模型文件", torch.zeros((1, 1, 3)))
 
             result = []
-            result.append(f"📄 模型文件: {模型}")
+            result.append(f"📄 模型文件: {model_name}")
             result.append(f"📊 模型大小: {ModelUtils.format_size(os.path.getsize(model_path))}")
             total_params = sum(t.numel() for t in model_data.values())
             
@@ -166,7 +166,7 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                 result.append(f"\n📌 模型未包含元信息")
 
             # 详细分析（基础/高级模式）
-            if 显示细节 == "基础":
+            if show_details == "基础":
                 # UNET分析
                 if 'UNET' in groups and groups['UNET']:
                     unet_results = self.analyze_unet_structure(model_data, groups['UNET'], total_params)
@@ -182,7 +182,7 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                     clip_results = self.analyze_clip_structure(model_data, groups['CLIP'], total_params, arch_info['type'])
                     result.extend(clip_results)
 
-            elif 显示细节 == "高级":
+            elif show_details == "高级":
                 result.append("\n🔍 模型所有键名:")
                 all_keys = set(model_data.keys())
                 
@@ -201,7 +201,7 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
 
             # 创建分析数据字典
             analysis_data = {
-                'model_name': 模型,
+                'model_name': model_name,
                 'model_size': ModelUtils.format_size(os.path.getsize(model_path)),
                 'total_params': total_params,
                 'total_params_formatted': self.format_params(total_params),
@@ -238,9 +238,9 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
             
             # 生成图表
             image_tensor = torch.zeros((1, 1, 3))
-            if 显示图表:
+            if show_charts:
                 try:
-                    chart_data = self.generate_visual_report(analysis_data, 模型, arch_info['type'])
+                    chart_data = self.generate_visual_report(analysis_data, model_name, arch_info['type'])
                     if chart_data:
                         image_tensor = self.convert_image(chart_data)
                 except Exception as e:
