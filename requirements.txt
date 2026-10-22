@@ -1,5 +1,6 @@
-torch>=1.12.0
+# torch 由 ComfyUI 自带，插件不声明：
+# 声明会让 ComfyUI Manager 在安装时 pip 解析 torch，可能重装或降级宿主环境。
 numpy>=1.23.0
 matplotlib>=3.5.0
 Pillow>=9.0.0
-safetensors>=0.3.0 
+safetensors>=0.3.0
