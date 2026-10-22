@@ -6,6 +6,9 @@
 （仓库：`ljleb/sd-mecha`，经 ComfyUI 插件 `comfy-mecha` 分发），许可为 **MIT**，
 全文见同目录 `LICENSE-sd-mecha`（Copyright (c) 2024 ljleb）。
 
+本项目以 **GPL-3.0** 发布（见仓库根目录 `LICENSE`）。MIT 与 GPL-3.0 兼容，
+这些模板数据可随本项目一并分发，但**保留其原始 MIT 署名与许可文本**。
+
 上游 `model_configs/` 共 11 个 YAML，其中 `singleton-mecha.yaml` 是 4 行内部标记
 （`keys: 1`），不是架构定义，未纳入。**其余 10 份全部收录**，文件名与上游一致，便于追溯。
 
