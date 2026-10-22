@@ -93,30 +93,12 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                 other_percent = other_params / total_params * 100
                 comp_params['其他'] = (other_params, other_percent)
             
-            # 计算EMA参数
+            # 计算EMA参数（model_ema.* 前缀/命名模式）
             ema_keys = []
-            
-            # 方法1: 所有可能的EMA命名模式
             ema_patterns = ['model_ema', 'ema.', '.ema', '_ema', 'ema_', 'EMA']
             for pattern in ema_patterns:
                 ema_keys.extend([k for k in model_data.keys() if pattern in k])
-            
-            # 方法2: 检查components目录中的所有EMA文件
-            components_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "components")
-            try:
-                for filename in os.listdir(components_dir):
-                    if 'EMA' in filename and filename.endswith('.txt'):
-                        ema_file_path = os.path.join(components_dir, filename)
-                        with open(ema_file_path, 'r', encoding='utf-8') as f:
-                            for line in f:
-                                line = line.strip()
-                                if line and not line.startswith('#'):
-                                    # 匹配所有包含此模式的键
-                                    matching_keys = [k for k in model_data.keys() if line in k]
-                                    ema_keys.extend(matching_keys)
-            except Exception as e:
-                logger.error(f"加载EMA组件文件时出错: {str(e)}")
-            
+
             # 移除重复项
             ema_keys = list(set(ema_keys))
             ema_params = sum(model_data[k].numel() for k in ema_keys if k in model_data)

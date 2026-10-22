@@ -6,6 +6,7 @@ Component Extractor Node - 组件提取器节点
 import os
 import folder_paths
 from .. import ModelUtils
+from ..model_toolkit import templates
 
 class ComponentExtractor:
     """组件提取器节点类"""
@@ -58,6 +59,13 @@ class ComponentExtractor:
                 
             # 提取组件数据
             extracted = {k: model_data[k] for k in groups[component]}
+
+            # 模板契约核对：已知架构时告诉用户组件是否完整
+            spec, _ = templates.detect(model_data.keys())
+            note = ""
+            if spec:
+                hit, total = spec.contract(component, extracted.keys())
+                note = f"，模板 {spec.identifier} 核对 {hit}/{total} 键"
             
             # 自动生成输出路径
             if not output_name:
@@ -75,7 +83,7 @@ class ComponentExtractor:
 
             save_path = os.path.join(save_dir, output_name)
             if ModelUtils.save_component(extracted, save_path):
-                return (f"✅ 成功保存{component}组件（{len(extracted)} 个键）到: {save_path}",)
+                return (f"✅ 成功保存{component}组件（{len(extracted)} 个键{note}）到: {save_path}",)
             else:
                 return ("❌ 保存组件失败",)
                 

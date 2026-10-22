@@ -212,13 +212,22 @@ class ModelUtils:
 
     @classmethod
     def group_model_keys(cls, model_data):
-        """将模型键值按组件分组（前缀优先，避免子串误判）"""
+        """将模型键值按组件分组。
+
+        已知架构（模板覆盖率达标）按模板逐键判定，不再靠前缀猜；
+        模板未收录的键与未知架构回退到前缀规则。
+        """
         keys = list(model_data.keys())
         unet_prefix = cls.detect_unet_prefix(keys)
         groups = defaultdict(list)
 
+        from . import templates  # 局部导入：避免包初始化期的循环依赖
+
+        spec, _ = templates.detect(keys)
+        spec_map = spec.assignment(keys) if spec else {}
+
         for key in keys:
-            groups[cls.classify_key(key, unet_prefix)].append(key)
+            groups[spec_map.get(key) or cls.classify_key(key, unet_prefix)].append(key)
 
         return groups
 
