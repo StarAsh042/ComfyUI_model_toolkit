@@ -197,4 +197,11 @@ pyyaml>=5.4.0
 - 对于大型SDXL模型，分析可能需要较长时间和更多内存
 
 ## 许可
-[MIT License](LICENSE)
+
+本项目以 **GNU General Public License v3.0** 发布，全文见 [LICENSE](LICENSE)。
+Copyright (C) 2026 StarAsh042
+
+第三方数据：
+
+- `components/architectures/*.yaml` 来自 [sd-mecha](https://github.com/ljleb/sd-mecha)（MIT），
+  原始许可见该目录下的 `LICENSE-sd-mecha`。MIT 与 GPL-3.0 兼容，可并入本项目一并分发。
