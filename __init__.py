@@ -142,15 +142,18 @@ class ModelUtils:
             return False
 
 # 导入节点类
+from .nodes.checkpoint_inspector import CheckpointInspector
 from .nodes.unet_inspector import UNetInspector
 
 # 节点类映射
 NODE_CLASS_MAPPINGS = {
+    "ModelInspector": CheckpointInspector,
     "UNetInspector": UNetInspector
 }
 
 # 显示名称映射
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "ModelInspector": "🔍 模型检查器",
     "UNetInspector": "🔬 UNET检查器"
 }
 
