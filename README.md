@@ -118,6 +118,22 @@ Pillow>=9.0.0
 safetensors>=0.3.0
 ```
 
+## 参与开发
+
+> **给外部贡献者的重要说明**
+>
+> `main` 分支受保护，且仅维护者可直接推送。
+> **请向 `dev` 分支提交 Pull Request；直接向 `main` 提交的 PR 大概率不会受理。**
+
+推荐流程：
+
+1. Fork 本仓库到你自己账号
+2. 从 `dev` 分支切出特性分支（`git checkout -b feature/xxx`）
+3. 提交改动并推送到你的 Fork
+4. 向本仓库的 **`dev` 分支**开 Pull Request，等待 CI 通过与合并
+
+分支流向：`feature/xxx` → `dev`（日常集成）→ `main`（发布版本）
+
 ## 安装方法
 
 1. 将此仓库克隆或下载到ComfyUI的`custom_nodes`目录：
@@ -178,19 +194,3 @@ safetensors>=0.3.0
 
 ## 许可
 [MIT License](LICENSE)
-
-## 参与开发
-
-> **给外部贡献者的重要说明**
->
-> `main` 分支受保护，且仅维护者可直接推送。
-> **请向 `dev` 分支提交 Pull Request；直接向 `main` 提交的 PR 大概率不会受理。**
-
-推荐流程：
-
-1. Fork 本仓库到你自己账号
-2. 从 `dev` 分支切出特性分支（`git checkout -b feature/xxx`）
-3. 提交改动并推送到你的 Fork
-4. 向本仓库的 **`dev` 分支**开 Pull Request，等待 CI 通过与合并
-
-分支流向：`feature/xxx` → `dev`（日常集成）→ `main`（发布版本）
