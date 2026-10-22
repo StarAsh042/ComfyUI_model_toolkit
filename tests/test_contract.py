@@ -47,7 +47,7 @@ EXPECTED = {
         "return_names": ("分析报告", "可视化图表"),
         "function": "analyze_model",
         "output_node": False,
-        "has_is_changed": False,
+        "has_is_changed": True,
         "inputs": [
             ("required", "模型", "folder:checkpoints", None, None, None),
             ("required", "显示细节", "choices", ["基础", "高级"], "基础", None),
@@ -90,7 +90,7 @@ EXPECTED = {
         "return_names": ("分析结果",),
         "function": "inspect_unet",
         "output_node": False,
-        "has_is_changed": False,
+        "has_is_changed": True,
         "inputs": [
             ("required", "model_name", "folder:checkpoints", None, "", None),
             ("required", "show_details", "choices", ["简略", "详细"], "简略", None),

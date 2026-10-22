@@ -52,6 +52,11 @@ class UNetInspector:
     FUNCTION = "inspect_unet"
     CATEGORY = "model_toolkit/分析"
     
+    @classmethod
+    def IS_CHANGED(cls, model_name, show_details):
+        """模型文件内容变化时让 ComfyUI 重跑（T10）。"""
+        return ModelUtils.model_fingerprint(folder_paths.get_full_path("checkpoints", model_name))
+    
     def inspect_unet(self, model_name, show_details):
         """分析UNET结构
         
@@ -63,9 +68,9 @@ class UNetInspector:
             tuple[str]: 分析结果
         """
         try:
-            # 加载模型
+            # 加载模型（只读头部，P4）
             model_path = folder_paths.get_full_path("checkpoints", model_name)
-            model_data = ModelUtils.load_model(model_path)
+            model_data = ModelUtils.load_model_index(model_path)
             
             if not model_data:
                 return ("❌ 无法加载模型文件",)

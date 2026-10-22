@@ -1,6 +1,7 @@
 """
 Model Toolkit 核心工具：模型加载 / 保存、键分组、架构识别与兼容性校验。
 """
+import json
 import logging
 import os
 from collections import defaultdict
@@ -10,6 +11,48 @@ import torch
 
 # 与包级 logger 同名，保证日志输出（logger name）不变
 logger = logging.getLogger(__package__.split(".")[0])
+
+# safetensors 头部 dtype 字符串 → torch dtype（fp8 只在较新 torch 中存在）
+SAFETENSORS_DTYPES = {
+    "F64": torch.float64,
+    "F32": torch.float32,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I64": torch.int64,
+    "I32": torch.int32,
+    "I16": torch.int16,
+    "I8": torch.int8,
+    "U8": torch.uint8,
+    "BOOL": torch.bool,
+    "F8_E4M3": getattr(torch, "float8_e4m3fn", torch.float32),
+    "F8_E5M2": getattr(torch, "float8_e5m2", torch.float32),
+}
+
+
+class TensorMeta:
+    """张量元信息（shape / dtype），只读。
+
+    分析链路只用 numel() / shape / dtype / element_size()，因此只需头部即可完成，
+    不必把权重读进内存（P4）。
+    """
+
+    __slots__ = ("shape", "dtype")
+
+    def __init__(self, shape, dtype):
+        self.shape = tuple(shape)
+        self.dtype = dtype
+
+    def numel(self):
+        total = 1
+        for dim in self.shape:
+            total *= dim
+        return total
+
+    def element_size(self):
+        return torch.empty(0, dtype=self.dtype).element_size()
+
+    def __repr__(self):
+        return f"TensorMeta(shape={self.shape}, dtype={self.dtype})"
 
 
 class ModelUtils:
@@ -71,6 +114,56 @@ class ModelUtils:
         except Exception as e:
             logger.error(f"读取模型元信息时出错: {str(e)}")
             return {}
+
+    @staticmethod
+    def model_fingerprint(model_path):
+        """文件指纹（mtime_ns + 大小），供 IS_CHANGED 判断模型内容是否变化。
+
+        文件不存在或路径为空时返回空字符串——与「没有模型」这一状态同样稳定，
+        不会因为每次执行都不同而反复触发重算。
+        """
+        if not model_path:
+            return ""
+        try:
+            stat = os.stat(model_path)
+        except OSError:
+            return ""
+        return f"{stat.st_mtime_ns}:{stat.st_size}"
+
+    @staticmethod
+    def read_safetensors_index(model_path):
+        """只读 safetensors 头部，返回 {key: TensorMeta}；失败返回 None。
+
+        头部是「8 字节长度 + JSON」，不触碰权重区，毫秒级完成、内存占用可忽略。
+        """
+        try:
+            with open(model_path, "rb") as f:
+                header_len = int.from_bytes(f.read(8), "little")
+                header = json.loads(f.read(header_len).decode("utf-8"))
+        except Exception as e:
+            logger.error(f"读取模型头部时出错: {str(e)}")
+            return None
+
+        header.pop("__metadata__", None)
+        return {
+            key: TensorMeta(
+                info.get("shape", ()),
+                SAFETENSORS_DTYPES.get(info.get("dtype"), torch.float32),
+            )
+            for key, info in header.items()
+        }
+
+    @classmethod
+    def load_model_index(cls, model_path):
+        """分析用加载：safetensors 只读头部，其它格式回退到全量加载。
+
+        返回的映射值可能是 TensorMeta 而非 Tensor，只适用于分析（不做数值运算）。
+        """
+        if not model_path:
+            return None
+        if str(model_path).lower().endswith((".safetensors", ".sft")):
+            return cls.read_safetensors_index(model_path)
+        return cls.load_model(model_path)
 
     @staticmethod
     def load_model(model_path):
