@@ -156,9 +156,45 @@ class ModelUtils:
             logger.error(f"保存组件时出错: {str(e)}")
             return False
 
+    @classmethod
+    def replace_component_keys(cls, target_data, replacement_data, component):
+        """按组件归属与张量形状把替换组件的键写入目标模型（原地修改）。
+
+        修复 B7/B8：component 参数决定可替换的键集合，
+        replacement 中不属于该组件、或形状不匹配的键一律跳过。
+
+        Returns:
+            dict: replaced（写入键数）/ missing（非本组件键数）/
+                  shape_mismatch（形状不匹配键数）/ target_keys（目标组件键数）
+        """
+        target_keys = set(cls.group_model_keys(target_data).get(component, []))
+        replaced = missing = shape_mismatch = 0
+
+        for key, value in replacement_data.items():
+            if key not in target_keys:
+                missing += 1
+                continue
+            target_value = target_data.get(key)
+            if target_value is None or tuple(target_value.shape) != tuple(value.shape):
+                shape_mismatch += 1
+                continue
+            target_data[key] = value
+            replaced += 1
+
+        return {
+            "replaced": replaced,
+            "missing": missing,
+            "shape_mismatch": shape_mismatch,
+            "target_keys": len(target_keys),
+        }
+
     @staticmethod
     def validate_compatibility(source_comp, target_comp):
-        """验证组件兼容性"""
+        """验证组件兼容性（全部键必须存在且形状一致）。
+
+        注意：替换节点已改用 replace_component_keys 做逐键校验，
+        本方法保留给需要「整份组件是否完全匹配」判断的调用方。
+        """
         try:
             for key in source_comp:
                 if key not in target_comp:

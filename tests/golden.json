@@ -34,7 +34,7 @@
       "text_sha256": "415007922de78f0941028c9022ac50687b3eb48d05bb7c6cef247bd75e8962c2"
     },
     "replacer_error": {
-      "text": "❌ 无法加载替换组件"
+      "text": "❌ 未找到替换组件: UNET-v1-SD.txt（请先运行「📤 组件提取器」生成）"
     }
   }
 }

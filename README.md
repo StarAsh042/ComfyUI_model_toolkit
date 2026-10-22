@@ -51,26 +51,29 @@
 
 ### 📤 组件提取器 (ComponentExtractor)
 
-从模型中提取特定组件。
+从模型中提取特定组件，产物写入 `ComfyUI/models/model_toolkit_extracted/`。
 
 - 输入：
   - `model_name`：选择源模型文件
   - `component`：要提取的组件类型（UNET/VAE/CLIP）
   - `output_name`：输出文件名（可选）
 - 输出：
-  - `提取结果`：操作结果信息
+  - `提取结果`：操作结果信息（含完整保存路径）
 
 ### 🔄 组件替换器 (ComponentReplacer)
 
-替换模型中的特定组件。
+用提取出的组件替换目标模型中的同名组件。
 
 - 输入：
   - `model_name`：选择目标模型文件
-  - `component`：要替换的组件类型（UNET/VAE/CLIP）
-  - `replacement_name`：选择替换用的组件文件
+  - `component`：要替换的组件类型（UNET/VAE/CLIP），决定哪些键允许被覆盖
+  - `replacement_name`：从 `models/model_toolkit_extracted/` 选择替换文件（即组件提取器的产物）
   - `output_name`：输出文件名（可选）
 - 输出：
-  - `替换结果`：操作结果信息
+  - `替换结果`：操作结果信息（替换 / 跳过键数）
+- 说明：
+  - 只替换属于所选 `component`、且键名与形状都匹配的键；其它组件的键不受影响
+  - 替换源目录里也可以直接放完整 checkpoint，此时只会取其中的目标组件
 
 ### 🔬 UNET检查器 (UNetInspector)
 
