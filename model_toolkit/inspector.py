@@ -7,6 +7,7 @@ import folder_paths
 import torch
 
 from .analysis import AnalysisMixin
+from . import architectures
 from .charts import ChartsMixin
 from .precision import PrecisionMixin
 from .core import ModelUtils
@@ -75,6 +76,11 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
             if arch_info.get('extra_info'):
                 for info in arch_info['extra_info']:
                     result.append(f"  • {info}")
+
+            # 架构能力提示：MMDiT/视频/音频架构下，三组件统计并不完整
+            arch_hint = architectures.report_hint(architectures.identify(model_data.keys()))
+            if arch_hint:
+                result.append(arch_hint)
             
             groups = ModelUtils.group_model_keys(model_data)
             
