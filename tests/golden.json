@@ -1,0 +1,40 @@
+{
+  "model": "Mine\\SD1\\Alpha_Anime_2.5D_fp16_v7.safetensors",
+  "environment": {
+    "comfyui": "0.42.4",
+    "python": "3.11.6",
+    "torch": "2.14.0+cpu"
+  },
+  "scenarios": {
+    "basic": {
+      "text_len": 633,
+      "text_sha256": "ad0477bbb8c59b4812420c50a813e9a92e37a4c2a299423b6ce64a642a246bd6",
+      "image_shape": [
+        1,
+        1,
+        3
+      ],
+      "image_dtype": "torch.float32",
+      "image_sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+    },
+    "advanced_chart": {
+      "text_len": 75643,
+      "text_sha256": "fdb17cced936a71515af2b1d9180f4bed718d22d8cd116514c152f885dd8db9f",
+      "image_shape": [
+        1,
+        1280,
+        2048,
+        4
+      ],
+      "image_dtype": "torch.float32",
+      "image_sha256": "25217503f61462a95fd571dc039313f47dcbbfb92a6860a4a0aaf9c924a2d381"
+    },
+    "unet": {
+      "text_len": 202,
+      "text_sha256": "4194679d51e7b61cc541fd0f193cd325d0add0e5c06d18272f5439d9e2f71964"
+    },
+    "replacer_error": {
+      "text": "❌ 无法加载替换组件"
+    }
+  }
+}
