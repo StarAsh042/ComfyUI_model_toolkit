@@ -58,6 +58,21 @@ class ModelUtils:
             return f"{num/1e6:.2f}M"
 
     @staticmethod
+    def read_safetensors_metadata(model_path):
+        """读取 safetensors 头部的 __metadata__（不加载权重）。
+
+        非 safetensors 文件返回空 dict，由调用方回退到键扫描。
+        """
+        if not model_path or not str(model_path).lower().endswith((".safetensors", ".sft")):
+            return {}
+        try:
+            with safetensors.safe_open(str(model_path), framework="pt", device="cpu") as f:
+                return dict(f.metadata() or {})
+        except Exception as e:
+            logger.error(f"读取模型元信息时出错: {str(e)}")
+            return {}
+
+    @staticmethod
     def load_model(model_path):
         """加载模型文件"""
         try:

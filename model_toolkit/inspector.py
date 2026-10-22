@@ -216,11 +216,12 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                 result.append(f"- 其他参数量: {self.format_params(other_params)} ({other_percent:.1f}%)")
                 result.append(f"- 其他键数量: {len(groups.get('其他', []))}")
             
-            # 元数据提取
-            metadata = {}
-            for k in model_data.keys():
-                if k.startswith('_metadata') or '_metadata' in k:
-                    metadata[k] = model_data[k]
+            # 元数据提取：safetensors 读头部 __metadata__，其余格式回退到键扫描
+            metadata = ModelUtils.read_safetensors_metadata(model_path)
+            if not metadata:
+                for k in model_data.keys():
+                    if k.startswith('_metadata') or '_metadata' in k:
+                        metadata[k] = model_data[k]
             
             if metadata:
                 result.append(f"\n📌 模型元信息:")

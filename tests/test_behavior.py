@@ -188,5 +188,23 @@ class ErrorPathTest(unittest.TestCase):
         self.assertEqual(text, "❌ 无法加载目标模型")
 
 
+class MetadataTest(unittest.TestCase):
+    """B4：safetensors 元信息必须从头部读取（不加载权重）。"""
+
+    MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
+
+    def test_read_safetensors_metadata(self):
+        import folder_paths
+
+        path = folder_paths.get_full_path("checkpoints", self.MODEL)
+        self.assertTrue(path, "测试模型不存在")
+        metadata = ModelUtils.read_safetensors_metadata(path)
+        self.assertEqual(metadata.get("format"), "pt")
+
+    def test_non_safetensors_returns_empty(self):
+        self.assertEqual(ModelUtils.read_safetensors_metadata("model.ckpt"), {})
+        self.assertEqual(ModelUtils.read_safetensors_metadata(None), {})
+
+
 if __name__ == "__main__":
     unittest.main()
