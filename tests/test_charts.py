@@ -39,5 +39,37 @@ class ChartStyleIsolationTest(unittest.TestCase):
         self.assertEqual(before, dict(plt.rcParams))
 
 
+class ConvertImageTest(unittest.TestCase):
+    """P3 之后 generate_visual_report 返回 PIL.Image，convert_image 需兼容旧 base64 入参。"""
+
+    def _image(self):
+        from PIL import Image
+
+        return Image.new("RGBA", (640, 400), (30, 30, 30, 255))
+
+    def test_accepts_pil_image(self):
+        tensor = ChartsMixin().convert_image(self._image())
+
+        self.assertEqual(tuple(tensor.shape), (1, 1280, 2048, 4))
+        # 第 4 通道是 alpha（=1.0），颜色值看 RGB 通道
+        self.assertAlmostEqual(float(tensor[0, 0, 0, 0]), 30 / 255, places=5)
+
+    def test_accepts_legacy_data_url(self):
+        import base64
+        import io
+
+        buf = io.BytesIO()
+        self._image().save(buf, format="PNG")
+        data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+        tensor = ChartsMixin().convert_image(data_url)
+
+        self.assertEqual(tuple(tensor.shape), (1, 1280, 2048, 4))
+
+    def test_none_returns_placeholder(self):
+        tensor = ChartsMixin().convert_image(None)
+        self.assertEqual(tuple(tensor.shape), (1, 1, 3))
+
+
 if __name__ == "__main__":
     unittest.main()

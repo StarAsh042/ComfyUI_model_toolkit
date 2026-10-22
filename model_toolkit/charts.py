@@ -18,6 +18,10 @@ CHART_RC = {
     'axes.unicode_minus': False,
 }
 
+# 图表输出尺寸与背景色（与 plt.savefig(facecolor=...) 时期保持一致）
+IMAGE_SIZE = (2048, 1280)
+FIGURE_BACKGROUND = '#1E1E1E'
+
 logger = logging.getLogger(__package__.split(".")[0])
 
 
@@ -41,7 +45,7 @@ class ChartsMixin:
             plt.style.use('dark_background')
             plt.rcParams.update(CHART_RC)
             # 使用稍大一些的画布
-            plt.figure(figsize=(20, 12), dpi=100) 
+            fig = plt.figure(figsize=(20, 12), dpi=100)
             
             # 添加标题
             plt.suptitle(
@@ -72,22 +76,14 @@ class ChartsMixin:
             # 调整布局
             plt.tight_layout(rect=[0, 0, 1, 0.95])
             
-            # 保存为临时内存中的图像
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', facecolor='#1E1E1E')
-            plt.close()
-            
-            # 使用PIL调整图像到精确尺寸
-            buf.seek(0)
-            img = Image.open(buf)
-            img_resized = img.resize((2048, 1280), Image.Resampling.LANCZOS)
-            
-            # 保存调整后的图像
-            buf_resized = io.BytesIO()
-            img_resized.save(buf_resized, format='PNG')
-            buf_resized.seek(0)
-            
-            return f"data:image/png;base64,{base64.b64encode(buf_resized.getvalue()).decode()}"
+            # 直接从 Agg 画布取像素：跳过 PNG 编解码与 base64 往返（P3）
+            fig.patch.set_facecolor(FIGURE_BACKGROUND)
+            fig.canvas.draw()
+            rgba = np.asarray(fig.canvas.buffer_rgba())
+            plt.close(fig)
+
+            # 缩放到固定输出尺寸
+            return Image.fromarray(rgba).resize(IMAGE_SIZE, Image.Resampling.LANCZOS)
         except Exception as e:
             logger.error(f"生成图表出错: {str(e)}")
             return None
@@ -284,25 +280,23 @@ class ChartsMixin:
         ax.tick_params(axis='x', labelcolor='white', labelrotation=0)
         ax.grid(True, axis='y', alpha=0.3)
 
-    def convert_image(self, base64_img):
-        """增强图像转换可靠性"""
+    def convert_image(self, image):
+        """把渲染结果转成 ComfyUI 的 IMAGE 张量。
+
+        支持 PIL.Image（P3 之后的正常路径）与旧的 base64 data URL（兼容旧调用）。
+        """
         try:
-            if not base64_img:
+            if image is None:
                 return torch.zeros((1, 1, 3))
-            # 解析base64数据
-            if ',' in base64_img:
-                header, data = base64_img.split(",", 1)
-            else:
-                data = base64_img
-            img_data = base64.b64decode(data)
-            img = Image.open(io.BytesIO(img_data))
-            # 保持原始比例调整尺寸
-            max_size = 2048
-            ratio = max_size / max(img.size)
-            new_size = (int(img.size[0]*ratio), int(img.size[1]*ratio))
-            img = img.resize(new_size, Image.Resampling.LANCZOS)
-            img_tensor = torch.from_numpy(np.array(img)).float() / 255.0
-            return img_tensor.unsqueeze(0)
+
+            if isinstance(image, str):
+                data = image.split(",", 1)[-1]
+                image = Image.open(io.BytesIO(base64.b64decode(data)))
+
+            if tuple(image.size) != IMAGE_SIZE:
+                image = image.resize(IMAGE_SIZE, Image.Resampling.LANCZOS)
+
+            return torch.from_numpy(np.array(image)).float().div_(255.0).unsqueeze(0)
         except Exception as e:
             logger.error(f"图像转换失败: {str(e)}")
             return torch.zeros((1, 512, 512, 3))
