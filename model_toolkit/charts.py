@@ -12,19 +12,34 @@ import numpy as np
 import torch
 from PIL import Image
 
-# 添加中文字体配置
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei']  # 优先使用系统字体
-plt.rcParams['axes.unicode_minus'] = False
+# 图表专用 rc 设置：只在渲染期间应用，不写入全局 matplotlib 状态
+CHART_RC = {
+    'font.sans-serif': ['SimHei', 'Microsoft YaHei'],  # 优先使用系统字体
+    'axes.unicode_minus': False,
+}
 
 logger = logging.getLogger(__package__.split(".")[0])
 
 
 class ChartsMixin:
     def generate_visual_report(self, analysis_data, model_name, arch_type):
-        """生成可视化报告"""
+        """生成可视化报告。
+
+        图表样式只在本方法内生效：进入前快照全局 rcParams，退出时恢复，
+        避免 dark_background 与中文字体设置污染同进程的其它节点（技术债）。
+        """
+        previous_rc = plt.rcParams.copy()
         try:
-            # 设置图表风格
+            return self._render_visual_report(analysis_data, model_name, arch_type)
+        finally:
+            plt.rcParams.update(previous_rc)
+
+    def _render_visual_report(self, analysis_data, model_name, arch_type):
+        """实际渲染；全局 rcParams 由 generate_visual_report 负责恢复。"""
+        try:
+            # 设置图表风格（仅本次渲染）
             plt.style.use('dark_background')
+            plt.rcParams.update(CHART_RC)
             # 使用稍大一些的画布
             plt.figure(figsize=(20, 12), dpi=100) 
             

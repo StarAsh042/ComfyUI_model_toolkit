@@ -10,12 +10,13 @@ import folder_paths
 
 from .model_toolkit.core import ModelUtils
 
-# 简化日志配置
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# 简化日志配置（ComfyUI 已配置 root logger 时不覆盖宿主设置）
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
 
 logger = logging.getLogger(__name__)
 

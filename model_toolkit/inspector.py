@@ -34,47 +34,12 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
         }
     
     def __init__(self):
-        self.components = self.load_components()
         self.last_analyzed_model = None  # 添加模型缓存
         self.cached_result = None
     
     RETURN_TYPES = ("STRING", "IMAGE")
     RETURN_NAMES = ("分析报告", "可视化图表")
     FUNCTION = "analyze_model"
-    
-    def load_components(self):
-        """加载组件定义文件"""
-        components = {}
-        components_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "components")
-        
-        # 扩展支持的组件类型
-        component_types = {
-            'UNET': [
-                'UNET-v1-SD.txt', 'UNET-v2-SD.txt', 'UNET-XL-SD.txt',
-                'UNET-v1-EMA.txt', 'UNET-Flux-SD.txt'
-            ],
-            'VAE': ['VAE-v1-SD.txt'],
-            'CLIP': [
-                'CLIP-v1-SD.txt', 'CLIP-v2-SD.txt', 'CLIP-XL-SD.txt',
-                'CLIP-v2-WD.txt'
-            ],
-            'EMA': ['UNET-v1-EMA.txt', 'UNET-v1-Pix2Pix-EMA.txt'] # 添加EMA组件
-        }
-        
-        for comp_type, files in component_types.items():
-            components[comp_type] = {}
-            for filename in files:
-                try:
-                    filepath = os.path.join(components_path, filename)
-                    if os.path.exists(filepath):
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            keys = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-                            model_type = filename.split('-')[1]  # 提取v1/v2/XL等标识
-                            components[comp_type][model_type] = set(keys)
-                except Exception as e:
-                    print(f"加载组件文件{filename}时出错: {str(e)}")
-                    
-        return components
     
     def analyze_model(self, 模型, 显示细节, 显示图表):
         """分析模型结构(主方法)"""
@@ -83,24 +48,6 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
             if self.last_analyzed_model == current_state and self.cached_result:
                 return self.cached_result
             self.last_analyzed_model = current_state
-            
-            def get_tensor_precision(tensor):
-                """确定张量的精度类型"""
-                dtype = tensor.dtype
-                if dtype == torch.float16:
-                    return "FP16 (半精度)"
-                elif dtype == torch.bfloat16:
-                    return "BF16 (Brain浮点)"
-                elif dtype == torch.float32:
-                    return "FP32 (单精度)"
-                elif dtype == torch.float64:
-                    return "FP64 (双精度)"
-                elif dtype == torch.int8:
-                    return "INT8 (量化)"
-                elif dtype == torch.uint8:
-                    return "UINT8"
-                else:
-                    return f"{dtype}"
             
             model_path = folder_paths.get_full_path("checkpoints", 模型)
             model_data = ModelUtils.load_model(model_path)
