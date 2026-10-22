@@ -90,12 +90,20 @@
 
 ## 支持的架构
 
-- SD1.x：Stable Diffusion 1.x系列模型（有架构模板，组件按键成员关系精确判定）
-- SDXL：Stable Diffusion XL系列模型（有架构模板，双文本编码器合并为 CLIP）
-- SD2.x：Stable Diffusion 2.x系列模型（启发式判定，暂无模板）
-- 带 EMA 权重的模型（`model_ema.*` 前缀识别）
+内置 **10 份架构模板**（来自 sd-mecha，MIT）：
 
-模板数据来自开源项目 sd-mecha（MIT），详见 `components/architectures/README.md`。
+- **SD1.x**：`sd1-ldm`（ComfyUI 单文件）、`sd1-kohya`、`sd1-supermerger_blocks`
+- **SDXL**：`sdxl-sgm`（ComfyUI 单文件）、`sdxl-kohya`、`sdxl-kohya_but_diffusers`、
+  `sdxl-diffusers_unet_only`、`sdxl-supermerger_blocks`
+- **Flux**：`flux-flux`；**SD3**：`sd3-comfyui`
+
+其中 SD1.x / SDXL 的 6 份模板参与**自动识别**：模型键被模板覆盖 ≥95% 时，
+组件归属按模板成员关系精确判定（SDXL 双文本编码器合并为 CLIP）。
+Flux/SD3 模板含 T5XXL、supermerger 模板只有 BLOCKS，超出当前节点能表达的组件范围，
+**数据已内置但暂不参与识别**。
+未命中模板的模型（SD2.x 等）回退到键前缀规则。
+
+模板细节与覆盖边界见 `components/architectures/README.md`；
 可用 `python tools/validate_templates.py <模型路径>` 校验某个模型是否被模板覆盖。
 
 ## 支持的组件

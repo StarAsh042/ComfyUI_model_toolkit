@@ -1,21 +1,25 @@
 """架构模板：组件划分与逐键形状契约。
 
 数据来源：sd_mecha 1.1.7 的内置 ``model_configs``（MIT，见同目录 LICENSE-sd-mecha）。
-上游用的是原始 checkpoint 键，组件名与本项目不同（``diffuser``/``clip_l``），
-本模块负责名称与 dtype 的适配，并用「模型键被模板覆盖率」做架构判定。
+上游用的是原始 checkpoint 键，组件名与本项目不同（``diffuser``/``clip_l``）。
+
+运行时读取编译后的 ``components/architectures/index.json``：
+YAML 是源数据（便于与上游 diff），但纯 Python 解析这 10 份要数秒，
+JSON 只要几十毫秒。改过 YAML 后必须运行 ``tools/build_template_index.py``。
 
 注意：上游的 ``ema`` 段存在键名丢点的问题（``model_ema.diffusion_modelinput_blocks00bias``），
 对真实 checkpoint 命中率近乎 0，因此 **不用于匹配**；EMA 仍由 ``model_ema.`` 前缀规则识别。
 """
+import json
 import logging
 from pathlib import Path
 
 import torch
-import yaml
 
 logger = logging.getLogger(__package__.split(".")[0])
 
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "components" / "architectures"
+ARCH_DIR = Path(__file__).resolve().parent.parent / "components" / "architectures"
+INDEX_PATH = ARCH_DIR / "index.json"
 
 # sd-mecha 组件名 → 本项目组件名
 COMPONENT_ALIASES = {
@@ -32,10 +36,21 @@ IGNORED_COMPONENTS = {"scheduler"}
 # 只用于匹配的组件（ema 段数据损坏，见模块 docstring）
 UNTRUSTED_COMPONENTS = {"EMA"}
 
-# 模板 identifier → 报告里显示的架构名
+# 本项目节点能表达的组件：模板若含其它组件（T5XXL / BLOCKS 等），不参与自动识别
+REPRESENTABLE_COMPONENTS = {"UNET", "VAE", "CLIP", "EMA"}
+
+# 模板（文件名 stem）→ 报告里显示的架构名
 DISPLAY_NAMES = {
     "sd1-ldm": "SD1.x",
+    "sd1-kohya": "SD1.x (kohya)",
     "sdxl-sgm": "SDXL",
+    "sdxl-kohya": "SDXL (kohya)",
+    "sdxl-kohya_but_diffusers": "SDXL (kohya/diffusers)",
+    "sdxl-diffusers_unet_only": "SDXL (diffusers UNet)",
+    "flux-flux": "Flux",
+    "sd3-comfyui": "SD3",
+    "sd1-supermerger_blocks": "SD1.x (SuperMerger blocks)",
+    "sdxl-supermerger_blocks": "SDXL (SuperMerger blocks)",
 }
 
 DTYPE_ALIASES = {
@@ -59,6 +74,8 @@ class ArchitectureSpec:
         self.identifier = identifier
         self.components = components
         self.source = source
+        # 含 T5XXL / BLOCKS 等本项目无法表达的组件时，不参与自动识别
+        self.supported = set(components).issubset(REPRESENTABLE_COMPONENTS)
         self._trusted = None
 
     @property
@@ -85,6 +102,13 @@ class ArchitectureSpec:
             self._trusted = trusted
         return self._trusted
 
+    def coverage(self, model_keys):
+        """模型键被模板覆盖的比例（模板认不认得这个模型）。"""
+        model_keys = set(model_keys)
+        if not model_keys:
+            return 0.0
+        return len(self.trusted_keys() & model_keys) / len(model_keys)
+
     def assignment(self, keys):
         """逐键判定组件：返回 {键: 组件名}，只包含模板收录且可信的键。"""
         wanted = set(keys)
@@ -97,13 +121,6 @@ class ArchitectureSpec:
                     result[key] = component
         return result
 
-    def coverage(self, model_keys):
-        """模型键被模板覆盖的比例（模板认不认得这个模型）。"""
-        model_keys = set(model_keys)
-        if not model_keys:
-            return 0.0
-        return len(self.trusted_keys() & model_keys) / len(model_keys)
-
     def contract(self, component, present_keys):
         """组件契约核对：返回 (命中必需键数, 必需键总数)。"""
         expected = self.keys(component, required_only=True)
@@ -114,36 +131,36 @@ class ArchitectureSpec:
 
 
 def _parse_component(entries):
-    parsed = {}
-    for key, meta in (entries or {}).items():
-        meta = meta or {}
-        parsed[key] = {
-            "shape": tuple(meta.get("shape") or ()),
-            "dtype": DTYPE_ALIASES.get(str(meta.get("dtype")), None),
-            "optional": bool(meta.get("optional", False)),
+    return {
+        key: {
+            "shape": tuple(meta[0] or ()),
+            "dtype": DTYPE_ALIASES.get(str(meta[1])),
+            "optional": bool(meta[2]),
         }
-    return parsed
+        for key, meta in (entries or {}).items()
+    }
 
 
-def load_specs(directory=TEMPLATES_DIR):
-    """读取目录下所有模板；坏文件跳过并记日志，不影响其余模板。"""
+def load_specs(index_path=INDEX_PATH):
+    """读取编译索引；文件缺失或损坏时返回空表（节点回退到前缀规则）。"""
+    path = Path(index_path)
+    if not path.is_file():
+        logger.error(f"架构模板索引缺失: {path}（请运行 tools/build_template_index.py）")
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.error(f"读取架构模板索引失败: {str(e)}")
+        return {}
+
     specs = {}
-    for path in sorted(Path(directory).glob("*.yaml")):
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except Exception as e:
-            logger.error(f"读取架构模板 {path.name} 失败: {str(e)}")
-            continue
-
-        identifier = data.get("identifier") or path.stem
-        components = {}
-        for raw_name, entries in (data.get("components") or {}).items():
-            if raw_name.lower() in IGNORED_COMPONENTS:
-                continue
-            name = COMPONENT_ALIASES.get(raw_name.lower(), raw_name.upper())
-            # 多个上游组件可能映射到同一个本项目组件（如 clip_l + clip_g → CLIP）
-            components.setdefault(name, {}).update(_parse_component(entries))
-        specs[identifier] = ArchitectureSpec(identifier, components, source=path.name)
+    for name, payload in (data.get("templates") or {}).items():
+        components = payload.get("components", payload)
+        specs[name] = ArchitectureSpec(
+            name,
+            {component: _parse_component(entries) for component, entries in components.items()},
+            source=path.name,
+        )
     return specs
 
 
@@ -159,10 +176,17 @@ def get_specs():
 
 
 def detect(model_keys, specs=None, min_coverage=0.95):
-    """按覆盖率选出架构模板；达不到阈值时返回 (None, 最佳覆盖率)。"""
+    """按覆盖率选出架构模板；只考虑节点能表达的组件。
+
+    同一架构可能有多份模板（如 SDXL 的 sgm / kohya），取覆盖率最高者；
+    覆盖率相同时按 identifier 字典序先到先得（加载顺序稳定）。
+    """
     specs = get_specs() if specs is None else specs
     best, best_coverage = None, 0.0
-    for spec in specs.values():
+    for identifier in sorted(specs):
+        spec = specs[identifier]
+        if not spec.supported:
+            continue
         coverage = spec.coverage(model_keys)
         if coverage > best_coverage:
             best, best_coverage = spec, coverage
