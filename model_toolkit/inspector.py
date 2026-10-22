@@ -331,9 +331,10 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
         else:
             logger.info(f"[进度 {progress}%] {desc}")
 
-    def generate_text_report(self, analysis_result):
+    def generate_text_report(self, analysis_result, ema_params=0, ema_keys=()):
         """生成文本格式的详细分析报告"""
         report = []
+        total_params = analysis_result['total_params']
         # 基础信息
         report.append(f"📄 模型文件: {analysis_result['model_name']}")
         report.append(f"📊 模型大小: {analysis_result['model_size']}")

@@ -241,5 +241,37 @@ class OldComfyUICompatTest(unittest.TestCase):
             self.assertIn("检测到旧版本ComfyUI", proc.stdout)
 
 
+class TextReportTest(unittest.TestCase):
+    """B6：generate_text_report 曾引用未定义变量，调用必 NameError。"""
+
+    def _analysis(self):
+        return {
+            "model_name": "demo.safetensors",
+            "model_size": "1.00 GB",
+            "total_params": 1_000_000,
+            "architecture": {"type": "SD1.x", "extra_info": ["UNET输入通道数: 4"]},
+            "components": {
+                "UNET": {"params": 800_000, "percentage": 80.0},
+                "VAE": {"params": 100_000, "percentage": 10.0},
+            },
+            "precision": {
+                "primary": "FP16 (半精度)",
+                "distribution": {"FP16 (半精度)": 100.0},
+            },
+        }
+
+    def test_report_without_ema(self):
+        text = CheckpointInspector().generate_text_report(self._analysis())
+        self.assertIn("demo.safetensors", text)
+        self.assertNotIn("EMA参数", text)
+
+    def test_report_with_ema(self):
+        text = CheckpointInspector().generate_text_report(
+            self._analysis(), ema_params=1000, ema_keys=["a", "b"]
+        )
+        self.assertIn("EMA参数", text)
+        self.assertIn("键数量: 2", text)
+
+
 if __name__ == "__main__":
     unittest.main()
