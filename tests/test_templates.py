@@ -10,10 +10,40 @@ from ComfyUI_model_toolkit.model_toolkit import templates
 
 
 class LoadTest(unittest.TestCase):
+    def test_all_upstream_configs_vendored(self):
+        """上游 10 份架构配置全部纳入（singleton-mecha 是内部标记，不是架构）。"""
+        specs = templates.get_specs()
+        self.assertEqual(len(specs), 10)
+
     def test_specs_loaded(self):
         specs = templates.get_specs()
         self.assertIn("sd1-ldm", specs)
         self.assertIn("sdxl-sgm", specs)
+
+    def test_kohya_and_variant_templates_present(self):
+        specs = templates.get_specs()
+        self.assertEqual(len(specs["sd1-kohya"].keys("UNET")), 686)
+        self.assertEqual(len(specs["sdxl-kohya"].keys("UNET")), 1680)
+        # 上游两份 kohya 变体的 identifier 相同，索引按文件名区分
+        self.assertIn("sdxl-kohya_but_diffusers", specs)
+
+    def test_templates_with_unrepresentable_components_are_not_supported(self):
+        """Flux/SD3 含 T5XXL、supermerger 只有 BLOCKS：数据保留，但不参与自动识别。"""
+        specs = templates.get_specs()
+        for name in ("flux-flux", "sd3-comfyui", "sd1-supermerger_blocks", "sdxl-supermerger_blocks"):
+            with self.subTest(template=name):
+                self.assertFalse(specs[name].supported)
+
+        for name in ("sd1-ldm", "sd1-kohya", "sdxl-sgm", "sdxl-kohya"):
+            with self.subTest(template=name):
+                self.assertTrue(specs[name].supported)
+
+    def test_unsupported_template_never_wins_detection(self):
+        flux = templates.get_specs()["flux-flux"]
+
+        spec, _ = templates.detect(list(flux.trusted_keys()))
+
+        self.assertNotEqual(getattr(spec, "identifier", None), "flux-flux")
 
     def test_sd1_component_alias(self):
         sd1 = templates.get_specs()["sd1-ldm"]
