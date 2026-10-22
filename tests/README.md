@@ -24,5 +24,5 @@ cd D:\GitHub\ComfyUI_model_toolkit
 - `test_behavior.GroupModelKeysTest` 与 `RealCheckpointGroupingTest` 锁定 B1 修复后的分类：
   CLIP 文本编码器键必须归 CLIP；真实模型分组数为 UNET 686 / CLIP 197 / VAE 248 / EMA 2。
   再改分类逻辑时，先改测试再改实现。
-- 黄金样本基线于 2026-10-22 因 B1 修复重建过一次（报告文本与图表哈希变化属预期）。
+- 黄金样本基线于 2026-10-22 因 B1/B3/B4 修复重建过（报告文本与图表哈希变化均属预期，原因见对应提交信息）。
 - `golden_check.py --write` 仅用于重建基线；重建前必须确认行为变化是预期的，并在提交信息里写明原因。
