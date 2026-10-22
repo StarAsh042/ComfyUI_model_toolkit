@@ -206,5 +206,40 @@ class MetadataTest(unittest.TestCase):
         self.assertEqual(ModelUtils.read_safetensors_metadata(None), {})
 
 
+class OldComfyUICompatTest(unittest.TestCase):
+    """B5：旧版 ComfyUI（无 add_model_folder_path）不应在导入期崩溃。"""
+
+    def test_import_without_add_model_folder_path(self):
+        import os
+        import subprocess
+        import sys
+        import tempfile
+
+        import _env
+
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = os.path.join(tmp, "folder_paths.py")
+            with open(stub, "w", encoding="utf-8") as f:
+                f.write(
+                    "def get_filename_list(name):\n"
+                    "    return []\n"
+                    "\n"
+                    "output_directory = ''\n"
+                )
+            code = "import ComfyUI_model_toolkit as m; print('IMPORT_OK', m.__version__)"
+            env = dict(os.environ)
+            env["PYTHONPATH"] = os.pathsep.join([tmp, str(_env.REPO_ROOT.parent)])
+            proc = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=180,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+            self.assertIn("IMPORT_OK", proc.stdout)
+            self.assertIn("检测到旧版本ComfyUI", proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
