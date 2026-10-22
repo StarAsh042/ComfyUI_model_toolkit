@@ -7,8 +7,8 @@
   },
   "scenarios": {
     "basic": {
-      "text_len": 633,
-      "text_sha256": "ad0477bbb8c59b4812420c50a813e9a92e37a4c2a299423b6ce64a642a246bd6",
+      "text_len": 635,
+      "text_sha256": "d4f2e57ab9453803e7c1f90a8637516f20a076a1f4af2790b2d9a229731da9fc",
       "image_shape": [
         1,
         1,
@@ -19,7 +19,7 @@
     },
     "advanced_chart": {
       "text_len": 75643,
-      "text_sha256": "fdb17cced936a71515af2b1d9180f4bed718d22d8cd116514c152f885dd8db9f",
+      "text_sha256": "80a0e208d084a83b5d0ef8a8da943c99898df4ea6eb989915de2d8503a7b3cfd",
       "image_shape": [
         1,
         1280,
@@ -27,7 +27,7 @@
         4
       ],
       "image_dtype": "torch.float32",
-      "image_sha256": "25217503f61462a95fd571dc039313f47dcbbfb92a6860a4a0aaf9c924a2d381"
+      "image_sha256": "5f694d83903c5efaaafbf48eb5aa14870108024be4075b2b64f5e0b11940a986"
     },
     "unet": {
       "text_len": 202,

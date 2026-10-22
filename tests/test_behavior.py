@@ -1,8 +1,8 @@
-"""行为特征测试：锁定重构前的现有行为。
+"""行为特征测试：锁定当前行为。
 
-注意：其中 `test_group_model_keys_misclassifies_clip_encoder` 锁定的是一处
-已知分类缺陷（CLIP 文本编码器键落进 VAE 组，见 CODE-REVIEW B1）。
-重构必须保持行为不变；修 bug 时需同时更新本测试。
+`test_group_model_keys_clip_encoder_stays_in_clip` 与
+`RealCheckpointGroupingTest` 锁定的是 B1 修复后的正确分类：
+CLIP 文本编码器键必须归 CLIP，不能因键含 'encoder' 被 VAE 抢走。
 """
 import tempfile
 import unittest
@@ -16,6 +16,17 @@ from ComfyUI_model_toolkit import ModelUtils
 from ComfyUI_model_toolkit.nodes.checkpoint_inspector import CheckpointInspector
 from ComfyUI_model_toolkit.nodes.component_extractor import ComponentExtractor
 from ComfyUI_model_toolkit.nodes.component_replacer import ComponentReplacer
+
+
+def _safetensors_keys(path):
+    """只读 safetensors 文件头，返回键名列表（不加载权重）。"""
+    import json
+    import struct
+
+    with open(path, "rb") as f:
+        header_size = struct.unpack("<Q", f.read(8))[0]
+        header = json.loads(f.read(header_size))
+    return [key for key in header if key != "__metadata__"]
 
 
 def _sd1_like_state_dict():
@@ -43,23 +54,54 @@ def _sd1_like_state_dict():
 
 
 class GroupModelKeysTest(unittest.TestCase):
-    def test_group_model_keys_misclassifies_clip_encoder(self):
-        """锁定现状（B1）：含 'encoder' 的 CLIP 键被归到 VAE，CLIP 只剩非 encoder 键。"""
+    def test_group_model_keys_clip_encoder_stays_in_clip(self):
+        """CLIP 文本编码器键必须归 CLIP，不能被 VAE 的 encoder 规则抢走（B1 修复）。"""
         sd = _sd1_like_state_dict()
         groups = ModelUtils.group_model_keys(sd)
 
         self.assertIn("model.diffusion_model.input_blocks.0.0.weight", groups["UNET"])
         self.assertIn("first_stage_model.decoder.conv_in.weight", groups["VAE"])
-        # B1 现状：CLIP 的 encoder 键落在 VAE 组
         self.assertIn(
+            "cond_stage_model.transformer.text_model.encoder.layers.0.self_attn.q_proj.weight",
+            groups["CLIP"],
+        )
+        self.assertNotIn(
             "cond_stage_model.transformer.text_model.encoder.layers.0.self_attn.q_proj.weight",
             groups["VAE"],
         )
-        self.assertEqual(groups["CLIP"], [])
 
     def test_group_model_keys_other_bucket(self):
         groups = ModelUtils.group_model_keys({"unrelated.key": torch.zeros(1)})
         self.assertEqual(groups["其他"], ["unrelated.key"])
+
+    def test_group_model_keys_extracted_vae_without_prefix(self):
+        """提取后的 VAE 文件键以 encoder./decoder. 开头，仍应归 VAE。"""
+        groups = ModelUtils.group_model_keys(
+            {
+                "encoder.conv_in.weight": torch.zeros(1),
+                "decoder.conv_out.weight": torch.zeros(1),
+            }
+        )
+        self.assertEqual(len(groups["VAE"]), 2)
+
+
+class RealCheckpointGroupingTest(unittest.TestCase):
+    """用真实 checkpoint 的键名（只读文件头，不加载权重）验证分组数量。"""
+
+    MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
+
+    def test_group_counts(self):
+        import folder_paths
+
+        path = folder_paths.get_full_path("checkpoints", self.MODEL)
+        self.assertTrue(path, "测试模型不存在")
+        keys = _safetensors_keys(path)
+        groups = ModelUtils.group_model_keys(dict.fromkeys(keys))
+        self.assertEqual(len(groups["UNET"]), 686)
+        self.assertEqual(len(groups["CLIP"]), 197)
+        self.assertEqual(len(groups["VAE"]), 248)
+        self.assertEqual(len(groups["EMA"]), 2)
+        self.assertEqual(len(groups["其他"]), 0)
 
 
 class FormattingTest(unittest.TestCase):
