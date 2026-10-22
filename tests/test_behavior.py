@@ -273,5 +273,26 @@ class TextReportTest(unittest.TestCase):
         self.assertIn("键数量: 2", text)
 
 
+class NonTensorPayload:
+    """用于验证反序列化安全的占位对象（非张量）。"""
+
+
+class TorchLoadSafetyTest(unittest.TestCase):
+    """T7：torch.load 必须显式 weights_only=True，拒绝非张量负载。"""
+
+    def test_torch_state_dict_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.pt"
+            torch.save({"state_dict": {"a": torch.ones(2)}}, path)
+            loaded = ModelUtils.load_model(str(path))
+            self.assertEqual(sorted(loaded), ["a"])
+
+    def test_rejects_non_tensor_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "unsafe.pt"
+            torch.save({"state_dict": {"a": NonTensorPayload()}}, path)
+            self.assertIsNone(ModelUtils.load_model(str(path)))
+
+
 if __name__ == "__main__":
     unittest.main()

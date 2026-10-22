@@ -79,7 +79,8 @@ class ModelUtils:
             if model_path.endswith('.safetensors'):
                 model_data = safetensors.torch.load_file(model_path, device="cpu")
             else:
-                model_data = torch.load(model_path, map_location="cpu")
+                # 显式 weights_only=True：拒绝 pickle 任意对象（torch<2.6 默认 False）
+                model_data = torch.load(model_path, map_location="cpu", weights_only=True)
                 if "state_dict" in model_data:
                     model_data = model_data["state_dict"]
             return model_data
