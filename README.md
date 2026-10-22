@@ -106,6 +106,21 @@ Flux/SD3 模板含 T5XXL、supermerger 模板只有 BLOCKS，超出当前节点�
 模板细节与覆盖边界见 `components/architectures/README.md`；
 可用 `python tools/validate_templates.py <模型路径>` 校验某个模型是否被模板覆盖。
 
+### 架构识别与能力矩阵
+
+报告会先识别架构家族，再判断"三组件统计"是否适用于它；不适用时直接给出提示，
+而不是给一个看起来正常、实则漏算的数字：
+
+| 家族 | 代表架构 | 报告提示 |
+|---|---|---|
+| SD 系 | SD1.x / SD2.x / SDXL | 无（统计完整） |
+| MMDiT | Flux、SD3、AuraFlow、PixArt、HunyuanDiT | ⚠️ 含 T5，CLIP 统计不完整 |
+| 级联 | Stable Cascade | ⚠️ 多阶段，单个 UNET ≠ 整模规模 |
+| 视频 / 音视频 | SVD、LTXV、MiniMax H3 | ⛔ 3D VAE / 时序层，统计不适用 |
+
+判据是"特征键是否存在"（参考 ComfyUI 0.42.4 的检测逻辑，GPL-3.0）。
+其中 **SD 家族经过本机真实模型验证**，其余为文档级判据、尚未用真实模型验证。
+
 ## 支持的组件
 
 节点按 **UNET / VAE / CLIP** 三类组件工作。当模型被架构模板覆盖（覆盖率 ≥ 95%）时，
