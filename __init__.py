@@ -142,13 +142,16 @@ class ModelUtils:
             return False
 
 # 导入节点类
+from .nodes.unet_inspector import UNetInspector
 
 # 节点类映射
 NODE_CLASS_MAPPINGS = {
+    "UNetInspector": UNetInspector
 }
 
 # 显示名称映射
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "UNetInspector": "🔬 UNET检查器"
 }
 
 # 版本兼容性检查
