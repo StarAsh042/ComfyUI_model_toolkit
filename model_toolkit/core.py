@@ -58,13 +58,29 @@ class ModelUtils:
             return f"{num/1e6:.2f}M"
 
     @staticmethod
+    def read_safetensors_metadata(model_path):
+        """读取 safetensors 头部的 __metadata__（不加载权重）。
+
+        非 safetensors 文件返回空 dict，由调用方回退到键扫描。
+        """
+        if not model_path or not str(model_path).lower().endswith((".safetensors", ".sft")):
+            return {}
+        try:
+            with safetensors.safe_open(str(model_path), framework="pt", device="cpu") as f:
+                return dict(f.metadata() or {})
+        except Exception as e:
+            logger.error(f"读取模型元信息时出错: {str(e)}")
+            return {}
+
+    @staticmethod
     def load_model(model_path):
         """加载模型文件"""
         try:
             if model_path.endswith('.safetensors'):
                 model_data = safetensors.torch.load_file(model_path, device="cpu")
             else:
-                model_data = torch.load(model_path, map_location="cpu")
+                # 显式 weights_only=True：拒绝 pickle 任意对象（torch<2.6 默认 False）
+                model_data = torch.load(model_path, map_location="cpu", weights_only=True)
                 if "state_dict" in model_data:
                     model_data = model_data["state_dict"]
             return model_data

@@ -188,5 +188,111 @@ class ErrorPathTest(unittest.TestCase):
         self.assertEqual(text, "❌ 无法加载目标模型")
 
 
+class MetadataTest(unittest.TestCase):
+    """B4：safetensors 元信息必须从头部读取（不加载权重）。"""
+
+    MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
+
+    def test_read_safetensors_metadata(self):
+        import folder_paths
+
+        path = folder_paths.get_full_path("checkpoints", self.MODEL)
+        self.assertTrue(path, "测试模型不存在")
+        metadata = ModelUtils.read_safetensors_metadata(path)
+        self.assertEqual(metadata.get("format"), "pt")
+
+    def test_non_safetensors_returns_empty(self):
+        self.assertEqual(ModelUtils.read_safetensors_metadata("model.ckpt"), {})
+        self.assertEqual(ModelUtils.read_safetensors_metadata(None), {})
+
+
+class OldComfyUICompatTest(unittest.TestCase):
+    """B5：旧版 ComfyUI（无 add_model_folder_path）不应在导入期崩溃。"""
+
+    def test_import_without_add_model_folder_path(self):
+        import os
+        import subprocess
+        import sys
+        import tempfile
+
+        import _env
+
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = os.path.join(tmp, "folder_paths.py")
+            with open(stub, "w", encoding="utf-8") as f:
+                f.write(
+                    "def get_filename_list(name):\n"
+                    "    return []\n"
+                    "\n"
+                    "output_directory = ''\n"
+                )
+            code = "import ComfyUI_model_toolkit as m; print('IMPORT_OK', m.__version__)"
+            env = dict(os.environ)
+            env["PYTHONPATH"] = os.pathsep.join([tmp, str(_env.REPO_ROOT.parent)])
+            proc = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=180,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+            self.assertIn("IMPORT_OK", proc.stdout)
+            self.assertIn("检测到旧版本ComfyUI", proc.stdout)
+
+
+class TextReportTest(unittest.TestCase):
+    """B6：generate_text_report 曾引用未定义变量，调用必 NameError。"""
+
+    def _analysis(self):
+        return {
+            "model_name": "demo.safetensors",
+            "model_size": "1.00 GB",
+            "total_params": 1_000_000,
+            "architecture": {"type": "SD1.x", "extra_info": ["UNET输入通道数: 4"]},
+            "components": {
+                "UNET": {"params": 800_000, "percentage": 80.0},
+                "VAE": {"params": 100_000, "percentage": 10.0},
+            },
+            "precision": {
+                "primary": "FP16 (半精度)",
+                "distribution": {"FP16 (半精度)": 100.0},
+            },
+        }
+
+    def test_report_without_ema(self):
+        text = CheckpointInspector().generate_text_report(self._analysis())
+        self.assertIn("demo.safetensors", text)
+        self.assertNotIn("EMA参数", text)
+
+    def test_report_with_ema(self):
+        text = CheckpointInspector().generate_text_report(
+            self._analysis(), ema_params=1000, ema_keys=["a", "b"]
+        )
+        self.assertIn("EMA参数", text)
+        self.assertIn("键数量: 2", text)
+
+
+class NonTensorPayload:
+    """用于验证反序列化安全的占位对象（非张量）。"""
+
+
+class TorchLoadSafetyTest(unittest.TestCase):
+    """T7：torch.load 必须显式 weights_only=True，拒绝非张量负载。"""
+
+    def test_torch_state_dict_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.pt"
+            torch.save({"state_dict": {"a": torch.ones(2)}}, path)
+            loaded = ModelUtils.load_model(str(path))
+            self.assertEqual(sorted(loaded), ["a"])
+
+    def test_rejects_non_tensor_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "unsafe.pt"
+            torch.save({"state_dict": {"a": NonTensorPayload()}}, path)
+            self.assertIsNone(ModelUtils.load_model(str(path)))
+
+
 if __name__ == "__main__":
     unittest.main()

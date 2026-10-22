@@ -19,9 +19,17 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# 设置组件路径
+# 版本兼容性检查（必须先于 folder_paths API 调用）
+if not hasattr(folder_paths, 'add_model_folder_path'):
+    logger.warning("检测到旧版本ComfyUI，部分功能可能受限")
+
+if not hasattr(folder_paths, 'get_filename_list'):
+    logger.error("不兼容的ComfyUI版本，请升级到v1.0+")
+
+# 设置组件路径（旧版本缺少 API 时跳过注册，保证导入不崩）
 components_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "components")
-folder_paths.add_model_folder_path("components", components_path)
+if hasattr(folder_paths, 'add_model_folder_path'):
+    folder_paths.add_model_folder_path("components", components_path)
 
 # 导入节点类
 from .nodes.checkpoint_inspector import CheckpointInspector
@@ -44,13 +52,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ComponentReplacer": "🔄 组件替换器", 
     "UNetInspector": "🔬 UNET检查器"
 }
-
-# 版本兼容性检查
-if not hasattr(folder_paths, 'add_model_folder_path'):
-    logger.warning("检测到旧版本ComfyUI，部分功能可能受限")
-
-if not hasattr(folder_paths, 'get_filename_list'):
-    logger.error("不兼容的ComfyUI版本，请升级到v1.0+")
 
 # 版本信息
 __version__ = "1.0.0" 
