@@ -19,7 +19,7 @@ class ComponentReplacer:
         return {
             "required": {
                 "model_name": (folder_paths.get_filename_list("checkpoints"), {"default": ""}),
-                "component_name": (["UNET", "VAE", "CLIP"], {"default": "UNET"}),
+                "component": (["UNET", "VAE", "CLIP"], {"default": "UNET"}),
                 "replacement_name": (folder_paths.get_filename_list("components"), {"default": ""}),
                 "output_name": ("STRING", {
                     "default": "modified_model",
