@@ -35,12 +35,15 @@
 分析模型文件并显示其架构和组件信息，提供可视化报告。
 
 - 输入：
-  - `模型`：选择要分析的模型文件
-  - `显示细节`：选择"基础"或"高级"显示模式
-  - `显示图表`：是否生成可视化图表
+  - `model_name`：选择要分析的模型文件
+  - `show_details`：选择"基础"或"高级"显示模式
+  - `show_charts`：是否生成可视化图表
 - 输出：
   - `分析报告`：包含模型架构、组件分布等详细信息
   - `可视化图表`：直观展示模型结构的图形化报表，包括参数分布、UNET结构等
+
+> `.safetensors` 只读取文件头部（键名/形状/精度），**不加载权重**；`.ckpt/.pt` 因格式限制仍需全量加载。
+> 模型文件被同名覆盖或重新下载后，节点会依据文件指纹自动重算，不会返回旧报告。
 
 特点：
 - 支持检测各种架构：SD1.x、SD2.x、SDXL及其变种
@@ -51,26 +54,29 @@
 
 ### 📤 组件提取器 (ComponentExtractor)
 
-从模型中提取特定组件。
+从模型中提取特定组件，产物写入 `ComfyUI/models/model_toolkit_extracted/`。
 
 - 输入：
   - `model_name`：选择源模型文件
   - `component`：要提取的组件类型（UNET/VAE/CLIP）
   - `output_name`：输出文件名（可选）
 - 输出：
-  - `提取结果`：操作结果信息
+  - `提取结果`：操作结果信息（含完整保存路径）
 
 ### 🔄 组件替换器 (ComponentReplacer)
 
-替换模型中的特定组件。
+用提取出的组件替换目标模型中的同名组件。
 
 - 输入：
   - `model_name`：选择目标模型文件
-  - `component`：要替换的组件类型（UNET/VAE/CLIP）
-  - `replacement_name`：选择替换用的组件文件
+  - `component`：要替换的组件类型（UNET/VAE/CLIP），决定哪些键允许被覆盖
+  - `replacement_name`：从 `models/model_toolkit_extracted/` 选择替换文件（即组件提取器的产物）
   - `output_name`：输出文件名（可选）
 - 输出：
-  - `替换结果`：操作结果信息
+  - `替换结果`：操作结果信息（替换 / 跳过键数）
+- 说明：
+  - 只替换属于所选 `component`、且键名与形状都匹配的键；其它组件的键不受影响
+  - 替换源目录里也可以直接放完整 checkpoint，此时只会取其中的目标组件
 
 ### 🔬 UNET检查器 (UNetInspector)
 
@@ -84,38 +90,51 @@
 
 ## 支持的架构
 
-- SD1.x：Stable Diffusion 1.x系列模型
-- SD2.x：Stable Diffusion 2.x系列模型
-- SDXL：Stable Diffusion XL系列模型
-- SD1.x-EMA：带有EMA权重的模型
+内置 **10 份架构模板**（来自 sd-mecha，MIT）：
+
+- **SD1.x**：`sd1-ldm`（ComfyUI 单文件）、`sd1-kohya`、`sd1-supermerger_blocks`
+- **SDXL**：`sdxl-sgm`（ComfyUI 单文件）、`sdxl-kohya`、`sdxl-kohya_but_diffusers`、
+  `sdxl-diffusers_unet_only`、`sdxl-supermerger_blocks`
+- **Flux**：`flux-flux`；**SD3**：`sd3-comfyui`
+
+其中 SD1.x / SDXL 的 6 份模板参与**自动识别**：模型键被模板覆盖 ≥95% 时，
+组件归属按模板成员关系精确判定（SDXL 双文本编码器合并为 CLIP）。
+Flux/SD3 模板含 T5XXL、supermerger 模板只有 BLOCKS，超出当前节点能表达的组件范围，
+**数据已内置但暂不参与识别**。
+未命中模板的模型（SD2.x 等）回退到键前缀规则。
+
+模板细节与覆盖边界见 `components/architectures/README.md`；
+可用 `python tools/validate_templates.py <模型路径>` 校验某个模型是否被模板覆盖。
+
+### 架构识别与能力矩阵
+
+报告会先识别架构家族，再判断"三组件统计"是否适用于它；不适用时直接给出提示，
+而不是给一个看起来正常、实则漏算的数字：
+
+| 家族 | 代表架构 | 报告提示 |
+|---|---|---|
+| SD 系 | SD1.x / SD2.x / SDXL | 无（统计完整） |
+| MMDiT | Flux、SD3、AuraFlow、PixArt、HunyuanDiT | ⚠️ 含 T5，CLIP 统计不完整 |
+| 级联 | Stable Cascade | ⚠️ 多阶段，单个 UNET ≠ 整模规模 |
+| 视频 / 音视频 | SVD、LTXV、MiniMax H3 | ⛔ 3D VAE / 时序层，统计不适用 |
+
+判据是"特征键是否存在"（参考 ComfyUI 0.42.4 的检测逻辑，GPL-3.0）。
+其中 **SD 家族经过本机真实模型验证**，其余为文档级判据、尚未用真实模型验证。
 
 ## 支持的组件
 
-- UNET：
-  - UNET-v1-SD：SD 1.x的UNET
-  - UNET-v2-SD：SD 2.x的UNET
-  - UNET-XL-SD：SDXL的UNET
-  - UNET-v1-EMA：带EMA的UNET
-  - UNET-Flux-SD：Flux架构的UNET
-
-- CLIP：
-  - CLIP-v1-SD：SD 1.x的CLIP
-  - CLIP-v2-SD：SD 2.x的CLIP
-  - CLIP-XL-SD：SDXL的CLIP
-  - CLIP-v2-WD：WD 1.4的CLIP
-
-- VAE：
-  - VAE-v1-SD：通用VAE组件
+节点按 **UNET / VAE / CLIP** 三类组件工作。当模型被架构模板覆盖（覆盖率 ≥ 95%）时，
+每个键的组件归属由模板成员关系直接判定；未覆盖的模型回退到键前缀规则。
 
 ## 依赖要求
 
-该插件依赖以下Python库：
+该插件依赖以下Python库（torch 由 ComfyUI 自带，插件不声明）：
 ```
-torch>=1.12.0
 numpy>=1.23.0
 matplotlib>=3.5.0
 Pillow>=9.0.0
 safetensors>=0.3.0
+pyyaml>=5.4.0
 ```
 
 ## 参与开发
@@ -193,4 +212,11 @@ safetensors>=0.3.0
 - 对于大型SDXL模型，分析可能需要较长时间和更多内存
 
 ## 许可
-[MIT License](LICENSE)
+
+本项目以 **GNU General Public License v3.0** 发布，全文见 [LICENSE](LICENSE)。
+Copyright (C) 2026 StarAsh042
+
+第三方数据：
+
+- `components/architectures/*.yaml` 来自 [sd-mecha](https://github.com/ljleb/sd-mecha)（MIT），
+  原始许可见该目录下的 `LICENSE-sd-mecha`。MIT 与 GPL-3.0 兼容，可并入本项目一并分发。

@@ -1,0 +1,40 @@
+{
+  "model": "Mine\\SD1\\Alpha_Anime_2.5D_fp16_v7.safetensors",
+  "environment": {
+    "comfyui": "0.42.4",
+    "python": "3.11.6",
+    "torch": "2.14.0+cpu"
+  },
+  "scenarios": {
+    "basic": {
+      "text_len": 646,
+      "text_sha256": "341cb1b683a57141d5cef255e33fe06a6265f208bc7d48e4c858ecd1d4f6c7db",
+      "image_shape": [
+        1,
+        1,
+        3
+      ],
+      "image_dtype": "torch.float32",
+      "image_sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+    },
+    "advanced_chart": {
+      "text_len": 75654,
+      "text_sha256": "c49bf0723adc748638937d9f5007182bbc559c46390090052113ce1ab360f77f",
+      "image_shape": [
+        1,
+        1280,
+        2048,
+        4
+      ],
+      "image_dtype": "torch.float32",
+      "image_sha256": "5f694d83903c5efaaafbf48eb5aa14870108024be4075b2b64f5e0b11940a986"
+    },
+    "unet": {
+      "text_len": 204,
+      "text_sha256": "415007922de78f0941028c9022ac50687b3eb48d05bb7c6cef247bd75e8962c2"
+    },
+    "replacer_error": {
+      "text": "❌ 未找到替换组件: UNET-v1-SD.txt（请先运行「📤 组件提取器」生成）"
+    }
+  }
+}
