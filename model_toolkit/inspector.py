@@ -33,25 +33,26 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
             }
         }
     
-    def __init__(self):
-        self.last_analyzed_model = None  # 添加模型缓存
-        self.cached_result = None
-    
     RETURN_TYPES = ("STRING", "IMAGE")
     RETURN_NAMES = ("分析报告", "可视化图表")
     FUNCTION = "analyze_model"
-    
+
+    @classmethod
+    def IS_CHANGED(cls, 模型, 显示细节, 显示图表):
+        """模型文件内容变化时让 ComfyUI 重跑（mtime+大小指纹）。
+
+        节点只在文件名相同的输入下才会命中缓存，而文件名不变、内容被替换
+        （重新下载 / 覆盖同名模型）时旧实现会一直返回旧报告（T10）。
+        """
+        return ModelUtils.model_fingerprint(folder_paths.get_full_path("checkpoints", 模型))
+
     def analyze_model(self, 模型, 显示细节, 显示图表):
         """分析模型结构(主方法)"""
         try:
-            current_state = (模型, 显示细节, 显示图表)
-            if self.last_analyzed_model == current_state and self.cached_result:
-                return self.cached_result
-            self.last_analyzed_model = current_state
-            
             model_path = folder_paths.get_full_path("checkpoints", 模型)
-            model_data = ModelUtils.load_model(model_path)
-            
+            # 只读头部即可完成分析（P4）：不把权重读进内存
+            model_data = ModelUtils.load_model_index(model_path)
+
             if not model_data:
                 return ("❌ 无法加载模型文件", torch.zeros((1, 1, 3)))
 
@@ -263,8 +264,7 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                 except Exception as e:
                     logger.error(f"生成图表失败: {str(e)}")
             
-            self.cached_result = ("\n".join(result), image_tensor)
-            return self.cached_result
+            return ("\n".join(result), image_tensor)
             
         except Exception as e:
             logger.error(f"分析失败: {str(e)}")
