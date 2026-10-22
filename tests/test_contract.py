@@ -29,6 +29,8 @@ def _describe_inputs(cls):
                     kind, choices = "folder:checkpoints", None
                 elif list(spec) == folder_paths.get_filename_list("components"):
                     kind, choices = "folder:components", None
+                elif list(spec) == folder_paths.get_filename_list("model_toolkit_extracted"):
+                    kind, choices = "folder:model_toolkit_extracted", None
                 else:
                     kind, choices = "choices", list(spec)
             else:
@@ -77,7 +79,7 @@ EXPECTED = {
         "inputs": [
             ("required", "model_name", "folder:checkpoints", None, "", None),
             ("required", "component", "choices", ["UNET", "VAE", "CLIP"], "UNET", None),
-            ("required", "replacement_name", "folder:components", None, "", None),
+            ("required", "replacement_name", "folder:model_toolkit_extracted", None, "", None),
             ("required", "output_name", "STRING", None, "modified_model", False),
         ],
     },

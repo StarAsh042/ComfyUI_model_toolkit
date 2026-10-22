@@ -26,10 +26,22 @@ if not hasattr(folder_paths, 'add_model_folder_path'):
 if not hasattr(folder_paths, 'get_filename_list'):
     logger.error("不兼容的ComfyUI版本，请升级到v1.0+")
 
-# 设置组件路径（旧版本缺少 API 时跳过注册，保证导入不崩）
+# 设置组件模板路径（旧版本缺少 API 时跳过注册，保证导入不崩）
 components_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "components")
 if hasattr(folder_paths, 'add_model_folder_path'):
     folder_paths.add_model_folder_path("components", components_path)
+
+    # 提取产物目录：组件提取器写这里，替换器也只从这里选（修复 B2）
+    models_root = getattr(folder_paths, "models_dir", None) or folder_paths.output_directory
+    extracted_components_path = os.path.join(models_root, "model_toolkit_extracted")
+    os.makedirs(extracted_components_path, exist_ok=True)
+    folder_paths.add_model_folder_path("model_toolkit_extracted", extracted_components_path)
+    # add_model_folder_path 对新目录使用空扩展集（= 放行所有文件），
+    # 这里显式限定为模型文件，避免模板/杂项文件混进替换器下拉
+    folder_paths.folder_names_and_paths["model_toolkit_extracted"] = (
+        folder_paths.folder_names_and_paths["model_toolkit_extracted"][0],
+        {".safetensors", ".ckpt", ".pt"},
+    )
 
 # 导入节点类
 from .nodes.checkpoint_inspector import CheckpointInspector

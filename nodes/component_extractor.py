@@ -68,29 +68,16 @@ class ComponentExtractor:
                 output_name += '.safetensors'
             
             # 保存组件
-            save_path = os.path.join(folder_paths.output_directory, output_name)
+            try:
+                save_dir = folder_paths.get_folder_paths("model_toolkit_extracted")[0]
+            except (KeyError, IndexError, AttributeError):
+                save_dir = folder_paths.output_directory
+
+            save_path = os.path.join(save_dir, output_name)
             if ModelUtils.save_component(extracted, save_path):
-                return (f"✅ 成功保存{component}组件到: {save_path}",)
+                return (f"✅ 成功保存{component}组件（{len(extracted)} 个键）到: {save_path}",)
             else:
                 return ("❌ 保存组件失败",)
                 
         except Exception as e:
             return (f"❌ 提取失败: {str(e)}",)
-
-    def load_component_definition(self, component):
-        # This method should be implemented to load the component definition
-        # based on the component type. It's a placeholder and should be replaced
-        # with the actual implementation.
-        pass
-
-    def load_model(self, model_path):
-        # This method should be implemented to load the model from the given path
-        # using the utils.model_utils.load_model function. It's a placeholder and should
-        # be replaced with the actual implementation.
-        pass
-
-    def save_component(self, component_data, save_path):
-        # This method should be implemented to save the component data to the given path
-        # using the utils.model_utils.save_component function. It's a placeholder and should
-        # be replaced with the actual implementation.
-        pass 
