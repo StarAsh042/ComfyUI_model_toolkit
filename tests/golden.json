@@ -30,8 +30,8 @@
       "image_sha256": "5f694d83903c5efaaafbf48eb5aa14870108024be4075b2b64f5e0b11940a986"
     },
     "unet": {
-      "text_len": 202,
-      "text_sha256": "4194679d51e7b61cc541fd0f193cd325d0add0e5c06d18272f5439d9e2f71964"
+      "text_len": 204,
+      "text_sha256": "415007922de78f0941028c9022ac50687b3eb48d05bb7c6cef247bd75e8962c2"
     },
     "replacer_error": {
       "text": "❌ 无法加载替换组件"
