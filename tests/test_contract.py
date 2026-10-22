@@ -5,6 +5,7 @@ RETURN_TYPES / RETURN_NAMES / FUNCTION / OUTPUT_NODE / IS_CHANGED。
 重构不得改变任何一项；改了就说明越界（见《代码重构_ComfyUI插件.md》第八节）。
 """
 import unittest
+from pathlib import Path
 
 import _env  # noqa: F401  设置 sys.path
 
@@ -27,8 +28,6 @@ def _describe_inputs(cls):
             if isinstance(spec, (list, tuple)):
                 if list(spec) == folder_paths.get_filename_list("checkpoints"):
                     kind, choices = "folder:checkpoints", None
-                elif list(spec) == folder_paths.get_filename_list("components"):
-                    kind, choices = "folder:components", None
                 elif list(spec) == folder_paths.get_filename_list("model_toolkit_extracted"):
                     kind, choices = "folder:model_toolkit_extracted", None
                 else:
@@ -113,11 +112,12 @@ class ContractTest(unittest.TestCase):
     def test_version(self):
         self.assertEqual(pkg.__version__, "1.0.0")
 
-    def test_components_folder_contents(self):
-        files = folder_paths.get_filename_list("components")
-        self.assertEqual(len(files), 21)
-        self.assertIn("UNET-v1-SD.txt", files)
-        self.assertIn("VAE-v1-SD.txt", files)
+    def test_architecture_templates_present(self):
+        """模板已升级为 YAML：目录里不应再有旧的键清单 txt。"""
+        templates_dir = Path(__file__).resolve().parent.parent / "components" / "architectures"
+        self.assertTrue((templates_dir / "sd1-ldm.yaml").is_file())
+        self.assertTrue((templates_dir / "sdxl-sgm.yaml").is_file())
+        self.assertEqual(list(templates_dir.parent.glob("*.txt")), [])
 
     def test_node_contracts(self):
         for name, expected in EXPECTED.items():

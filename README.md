@@ -90,38 +90,28 @@
 
 ## 支持的架构
 
-- SD1.x：Stable Diffusion 1.x系列模型
-- SD2.x：Stable Diffusion 2.x系列模型
-- SDXL：Stable Diffusion XL系列模型
-- SD1.x-EMA：带有EMA权重的模型
+- SD1.x：Stable Diffusion 1.x系列模型（有架构模板，组件按键成员关系精确判定）
+- SDXL：Stable Diffusion XL系列模型（有架构模板，双文本编码器合并为 CLIP）
+- SD2.x：Stable Diffusion 2.x系列模型（启发式判定，暂无模板）
+- 带 EMA 权重的模型（`model_ema.*` 前缀识别）
+
+模板数据来自开源项目 sd-mecha（MIT），详见 `components/architectures/README.md`。
+可用 `python tools/validate_templates.py <模型路径>` 校验某个模型是否被模板覆盖。
 
 ## 支持的组件
 
-- UNET：
-  - UNET-v1-SD：SD 1.x的UNET
-  - UNET-v2-SD：SD 2.x的UNET
-  - UNET-XL-SD：SDXL的UNET
-  - UNET-v1-EMA：带EMA的UNET
-  - UNET-Flux-SD：Flux架构的UNET
-
-- CLIP：
-  - CLIP-v1-SD：SD 1.x的CLIP
-  - CLIP-v2-SD：SD 2.x的CLIP
-  - CLIP-XL-SD：SDXL的CLIP
-  - CLIP-v2-WD：WD 1.4的CLIP
-
-- VAE：
-  - VAE-v1-SD：通用VAE组件
+节点按 **UNET / VAE / CLIP** 三类组件工作。当模型被架构模板覆盖（覆盖率 ≥ 95%）时，
+每个键的组件归属由模板成员关系直接判定；未覆盖的模型回退到键前缀规则。
 
 ## 依赖要求
 
-该插件依赖以下Python库：
+该插件依赖以下Python库（torch 由 ComfyUI 自带，插件不声明）：
 ```
-torch>=1.12.0
 numpy>=1.23.0
 matplotlib>=3.5.0
 Pillow>=9.0.0
 safetensors>=0.3.0
+pyyaml>=5.4.0
 ```
 
 ## 参与开发
