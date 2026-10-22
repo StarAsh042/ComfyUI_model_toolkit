@@ -8,12 +8,13 @@ import torch
 
 from .analysis import AnalysisMixin
 from .charts import ChartsMixin
+from .precision import PrecisionMixin
 from .core import ModelUtils
 
 logger = logging.getLogger(__name__)
 
 
-class CheckpointInspector(AnalysisMixin, ChartsMixin):
+class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
     """提供完整的模型分析功能，包括：
     - 模型架构检测 (SD1.x/SD2.x/SDXL)
     - 参数统计和精度分析
