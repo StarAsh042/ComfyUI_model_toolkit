@@ -7,6 +7,30 @@ import os
 import folder_paths
 from .. import ModelUtils
 
+# 块名 → 索引定位模式（兼容带 model.diffusion_model. 前缀的键）
+_BLOCK_PATTERNS = {
+    'input': ('input_blocks', 'down_blocks'),
+    'middle': ('middle_block', 'mid_block', 'bottleneck'),
+    'output': ('output_blocks', 'up_blocks'),
+}
+
+
+def _count_blocks(keys, patterns):
+    """统计块数量：定位块名后取紧随其后的数字索引。
+
+    全量 checkpoint 的键形如 model.diffusion_model.input_blocks.0.0.weight，
+    不能直接取 split('.')[1]（那是 diffusion_model）；必须先找到块名再取下一段。
+    """
+    indices = set()
+    for key in keys:
+        parts = key.split('.')
+        for i, part in enumerate(parts[:-1]):
+            if part in patterns and parts[i + 1].isdigit():
+                indices.add(int(parts[i + 1]))
+                break
+    return len(indices)
+
+
 class UNetInspector:
     """UNET检查器节点类"""
     
@@ -72,7 +96,7 @@ class UNetInspector:
             for block_name, keys in blocks.items():
                 if keys:
                     params = sum(unet_data[k].numel() for k in keys)
-                    block_count = len(set(k.split('.')[1] for k in keys))
+                    block_count = _count_blocks(keys, _BLOCK_PATTERNS[block_name])
                     percentage = params / total_params * 100
                     result.append(f"  • {block_name}块: {block_count}个")
                     result.append(f"    参数量: {ModelUtils.format_params(params)} ({percentage:.1f}%)")

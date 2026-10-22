@@ -15,12 +15,21 @@ logger = logging.getLogger(__package__.split(".")[0])
 class ModelUtils:
     """模型工具类 - 提供模型处理的核心功能"""
     
-    COMPONENT_TYPES = {
-        'UNET': 'diffusion_model',
-        'VAE': ['first_stage_model', 'encoder', 'decoder', 'quant_conv'],
-        'CLIP': ['cond_stage_model', 'text_model', 'transformer'],
-        'EMA': 'model_ema'
+    # 组件键前缀。顺序即优先级：CLIP 必须排在 VAE 之前，
+    # 否则文本编码器的 encoder.* 键会被 VAE 抢走（B1）。
+    COMPONENT_PREFIXES = {
+        'CLIP': ('cond_stage_model.', 'conditioner.', 'text_encoder.', 'text_encoder_2.'),
+        'VAE': ('first_stage_model.', 'vae.'),
+        'EMA': ('model_ema.',),
     }
+
+    # UNET 前缀候选：按命中键数投票选出（参照 ComfyUI unet_prefix_from_state_dict）
+    UNET_PREFIX_CANDIDATES = (
+        'model.diffusion_model.',
+        'diffusion_model.',
+        'model.model.',
+        'net.',
+    )
     
     ARCH_FEATURES = {
         'SDXL': 'text_model_2',
@@ -63,27 +72,45 @@ class ModelUtils:
             logger.error(f"加载模型时出错: {str(e)}")
             return None
 
+    @staticmethod
+    def detect_unet_prefix(keys):
+        """按键数投票选出 UNET 前缀；命中不超过 5 个键时返回 None。"""
+        counts = {candidate: 0 for candidate in ModelUtils.UNET_PREFIX_CANDIDATES}
+        for key in keys:
+            for candidate in counts:
+                if key.startswith(candidate):
+                    counts[candidate] += 1
+                    break
+        best = max(counts, key=counts.get)
+        return best if counts[best] > 5 else None
+
+    @classmethod
+    def classify_key(cls, key, unet_prefix=None):
+        """把单个键归入组件；无法判定时归入 '其他'。"""
+        for comp_name, prefixes in cls.COMPONENT_PREFIXES.items():
+            if key.startswith(prefixes):
+                return comp_name
+        if unet_prefix and key.startswith(unet_prefix):
+            return 'UNET'
+        # 提取产物（键已去掉完整前缀）的兜底规则
+        if key.startswith(('encoder.', 'decoder.', 'quant_conv.')):
+            return 'VAE'
+        if key.startswith(('text_model.', 'transformer.')):
+            return 'CLIP'
+        if 'diffusion_model.' in key:
+            return 'UNET'
+        return '其他'
+
     @classmethod
     def group_model_keys(cls, model_data):
-        """将模型键值按组件分组"""
+        """将模型键值按组件分组（前缀优先，避免子串误判）"""
+        keys = list(model_data.keys())
+        unet_prefix = cls.detect_unet_prefix(keys)
         groups = defaultdict(list)
-        
-        for key in model_data.keys():
-            grouped = False
-            for comp_name, patterns in cls.COMPONENT_TYPES.items():
-                if isinstance(patterns, list):
-                    if any(p in key for p in patterns):
-                        groups[comp_name].append(key)
-                        grouped = True
-                        break
-                elif patterns in key:
-                    groups[comp_name].append(key)
-                    grouped = True
-                    break
-            
-            if not grouped:
-                groups['其他'].append(key)
-        
+
+        for key in keys:
+            groups[cls.classify_key(key, unet_prefix)].append(key)
+
         return groups
 
     @classmethod

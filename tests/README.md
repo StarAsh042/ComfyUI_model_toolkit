@@ -21,6 +21,8 @@ cd D:\GitHub\ComfyUI_model_toolkit
 
 ## 约定
 
-- `test_behavior.test_group_model_keys_misclassifies_clip_encoder` 锁定的是已知缺陷
-  （CODE-REVIEW B1：CLIP 文本编码器键落进 VAE 组）。重构期间不得改变；修 bug 时同步更新。
-- `golden_check.py --write` 仅用于重建基线，重构期间禁止使用。
+- `test_behavior.GroupModelKeysTest` 与 `RealCheckpointGroupingTest` 锁定 B1 修复后的分类：
+  CLIP 文本编码器键必须归 CLIP；真实模型分组数为 UNET 686 / CLIP 197 / VAE 248 / EMA 2。
+  再改分类逻辑时，先改测试再改实现。
+- 黄金样本基线于 2026-10-22 因 B1 修复重建过一次（报告文本与图表哈希变化属预期）。
+- `golden_check.py --write` 仅用于重建基线；重建前必须确认行为变化是预期的，并在提交信息里写明原因。
