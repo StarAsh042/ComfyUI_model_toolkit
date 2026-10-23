@@ -83,6 +83,23 @@ class AnalyzeWithoutLoadingWeightsTest(unittest.TestCase):
             self.assertIn("模型架构", text)
             self.assertEqual(tuple(image.shape), (1, 1, 3))
 
+    def test_inspector_accepts_model_dir(self):
+        """model_dir：选了具体目录时报告多一行「📁 模型目录」，「（全部）」时没有。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "tiny.safetensors")
+            safetensors.torch.save_file(_tiny_state_dict(), path)
+            self._patch(tmp, path)
+            try:
+                text_all, _ = CheckpointInspector().analyze_model("tiny.safetensors", "基础", False)
+                text_dir, _ = CheckpointInspector().analyze_model(
+                    "tiny.safetensors", "基础", False, model_dir="checkpoints"
+                )
+            finally:
+                self._restore()
+
+            self.assertNotIn("📁 模型目录", text_all)
+            self.assertIn("📁 模型目录: checkpoints", text_dir)
+
 
 class ModelFingerprintTest(unittest.TestCase):
     def test_fingerprint_changes_when_file_changes(self):
@@ -122,11 +139,16 @@ class IsChangedTest(unittest.TestCase):
             try:
                 first = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
                 second = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
+                with_dir = CheckpointInspector.IS_CHANGED(
+                    "tiny.safetensors", "基础", True, model_dir="checkpoints"
+                )
             finally:
                 folder_paths.get_full_path = original
 
             self.assertEqual(first, second)
             self.assertTrue(first)
+            # model_dir 只决定在哪个目录里找文件；同一个文件的指纹必须一致
+            self.assertEqual(first, with_dir)
 
 
 if __name__ == "__main__":

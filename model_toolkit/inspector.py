@@ -11,6 +11,7 @@ from . import architectures
 from .charts import ChartsMixin
 from .precision import PrecisionMixin
 from .core import ModelUtils
+from .folders import ALL_DIRS, list_model_dirs, resolve_model_path
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,10 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
     def INPUT_TYPES(cls):
         return {
             "required": {
+                # 顶部目录选择：models/ 下第一层子目录。模型列表由前端
+                # js/model_dir_filter.js 按此值联动——INPUT_TYPES 只在
+                # 启动时求值一次，服务端无法做控件间联动。
+                "model_dir": (list_model_dirs(), {"default": ALL_DIRS}),
                 "model_name": (folder_paths.get_filename_list("checkpoints"),),
                 "show_details": (["基础", "高级"], {"default": "基础"}),
                 "show_charts": ("BOOLEAN", {"default": True})
@@ -39,18 +44,23 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
     FUNCTION = "analyze_model"
 
     @classmethod
-    def IS_CHANGED(cls, model_name, show_details, show_charts):
+    def IS_CHANGED(cls, model_name, show_details, show_charts, model_dir=ALL_DIRS):
         """模型文件内容变化时让 ComfyUI 重跑（mtime+大小指纹）。
 
         节点只在文件名相同的输入下才会命中缓存，而文件名不变、内容被替换
         （重新下载 / 覆盖同名模型）时旧实现会一直返回旧报告（T10）。
         """
-        return ModelUtils.model_fingerprint(folder_paths.get_full_path("checkpoints", model_name))
+        return ModelUtils.model_fingerprint(resolve_model_path(model_dir, model_name))
 
-    def analyze_model(self, model_name, show_details, show_charts):
-        """分析模型结构(主方法)"""
+    def analyze_model(self, model_name, show_details, show_charts, model_dir=ALL_DIRS):
+        """分析模型结构(主方法)
+
+        model_dir 放在签名末尾并给默认值：保持既有位置参数调用
+        （测试 / golden_check / 外部脚本）兼容；控件顺序由 INPUT_TYPES
+        决定，与函数签名顺序无关。
+        """
         try:
-            model_path = folder_paths.get_full_path("checkpoints", model_name)
+            model_path = resolve_model_path(model_dir, model_name)
             # 只读头部即可完成分析（P4）：不把权重读进内存
             model_data = ModelUtils.load_model_index(model_path)
 
@@ -59,6 +69,8 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
 
             result = []
             result.append(f"📄 模型文件: {model_name}")
+            if model_dir != ALL_DIRS:
+                result.append(f"📁 模型目录: {model_dir}")
             result.append(f"📊 模型大小: {ModelUtils.format_size(os.path.getsize(model_path))}")
             total_params = sum(t.numel() for t in model_data.values())
             

@@ -35,6 +35,9 @@
 分析模型文件并显示其架构和组件信息，提供可视化报告。
 
 - 输入：
+  - `model_dir`：选择模型所在目录（`ComfyUI/models/` 下第一层子目录，如
+    checkpoints / diffusion_models / loras…）。默认「（全部）」合并所有目录
+    （与旧版行为一致）；选择具体目录后，下方模型列表只显示该目录下的模型
   - `model_name`：选择要分析的模型文件
   - `show_details`：选择"基础"或"高级"显示模式
   - `show_charts`：是否生成可视化图表
