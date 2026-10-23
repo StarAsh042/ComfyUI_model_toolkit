@@ -143,17 +143,20 @@ class ModelUtils:
 
 # 导入节点类
 from .nodes.checkpoint_inspector import CheckpointInspector
+from .nodes.component_extractor import ComponentExtractor
 from .nodes.unet_inspector import UNetInspector
 
 # 节点类映射
 NODE_CLASS_MAPPINGS = {
     "ModelInspector": CheckpointInspector,
+    "ComponentExtractor": ComponentExtractor,
     "UNetInspector": UNetInspector
 }
 
 # 显示名称映射
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ModelInspector": "🔍 模型检查器",
+    "ComponentExtractor": "📤 组件提取器",
     "UNetInspector": "🔬 UNET检查器"
 }
 
