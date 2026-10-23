@@ -171,4 +171,4 @@ if not hasattr(folder_paths, 'get_filename_list'):
     logger.error("不兼容的ComfyUI版本，请升级到v1.0+")
 
 # 版本信息
-__version__ = "0.1.0" 
+__version__ = "1.0.0" 
