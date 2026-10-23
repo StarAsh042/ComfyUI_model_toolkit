@@ -12,7 +12,6 @@ import torch
 
 from ComfyUI_model_toolkit import ModelUtils
 from ComfyUI_model_toolkit.nodes.checkpoint_inspector import CheckpointInspector
-from ComfyUI_model_toolkit.nodes.unet_inspector import UNetInspector
 
 
 def _tiny_state_dict():
@@ -84,19 +83,6 @@ class AnalyzeWithoutLoadingWeightsTest(unittest.TestCase):
             self.assertIn("模型架构", text)
             self.assertEqual(tuple(image.shape), (1, 1, 3))
 
-    def test_unet_inspector_reads_header_only(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "tiny.safetensors")
-            safetensors.torch.save_file(_tiny_state_dict(), path)
-            self._patch(tmp, path)
-            try:
-                (text,) = UNetInspector().inspect_unet("tiny.safetensors", "简略")
-            finally:
-                self._restore()
-
-            self.assertIn("UNET参数量", text)
-            self.assertIn("input块: 1", text)
-
 
 class ModelFingerprintTest(unittest.TestCase):
     def test_fingerprint_changes_when_file_changes(self):
@@ -136,13 +122,11 @@ class IsChangedTest(unittest.TestCase):
             try:
                 first = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
                 second = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
-                unet = UNetInspector.IS_CHANGED("tiny.safetensors", "简略")
             finally:
                 folder_paths.get_full_path = original
 
             self.assertEqual(first, second)
             self.assertTrue(first)
-            self.assertEqual(first, unet)
 
 
 if __name__ == "__main__":

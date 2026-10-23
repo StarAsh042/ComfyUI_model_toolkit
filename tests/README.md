@@ -16,7 +16,7 @@ cd D:\GitHub\ComfyUI_model_toolkit
 & "D:\AIGC\ComfyUI\.ext\python.exe" tests\golden_check.py
 ```
 
-覆盖四个场景：基础报告、高级报告 + 图表、UNET 简略、替换器错误路径。
+覆盖三个场景：基础报告、高级报告 + 图表、替换器错误路径。
 比对文本 SHA256、图像张量 shape/dtype/完整字节 SHA256。
 
 ## 约定

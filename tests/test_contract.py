@@ -82,19 +82,6 @@ EXPECTED = {
             ("required", "output_name", "STRING", None, "modified_model", False),
         ],
     },
-    "UNetInspector": {
-        "display": "🔬 UNET检查器",
-        "category": "model_toolkit/分析",
-        "return_types": ("STRING",),
-        "return_names": ("分析结果",),
-        "function": "inspect_unet",
-        "output_node": False,
-        "has_is_changed": True,
-        "inputs": [
-            ("required", "model_name", "folder:checkpoints", None, "", None),
-            ("required", "show_details", "choices", ["简略", "详细"], "简略", None),
-        ],
-    },
 }
 
 
@@ -102,11 +89,11 @@ class ContractTest(unittest.TestCase):
     def test_mapping_keys_and_order(self):
         self.assertEqual(
             list(pkg.NODE_CLASS_MAPPINGS),
-            ["ModelInspector", "ComponentExtractor", "ComponentReplacer", "UNetInspector"],
+            ["ModelInspector", "ComponentExtractor", "ComponentReplacer"],
         )
         self.assertEqual(
             list(pkg.NODE_DISPLAY_NAME_MAPPINGS),
-            ["ModelInspector", "ComponentExtractor", "ComponentReplacer", "UNetInspector"],
+            ["ModelInspector", "ComponentExtractor", "ComponentReplacer"],
         )
 
     def test_version(self):

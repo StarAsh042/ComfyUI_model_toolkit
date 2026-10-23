@@ -44,22 +44,19 @@ if hasattr(folder_paths, 'add_model_folder_path'):
 from .nodes.checkpoint_inspector import CheckpointInspector
 from .nodes.component_extractor import ComponentExtractor
 from .nodes.component_replacer import ComponentReplacer
-from .nodes.unet_inspector import UNetInspector
 
 # 节点类映射
 NODE_CLASS_MAPPINGS = {
     "ModelInspector": CheckpointInspector,
     "ComponentExtractor": ComponentExtractor,
     "ComponentReplacer": ComponentReplacer,
-    "UNetInspector": UNetInspector
 }
 
 # 显示名称映射
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ModelInspector": "🔍 模型检查器",
     "ComponentExtractor": "📤 组件提取器",
-    "ComponentReplacer": "🔄 组件替换器", 
-    "UNetInspector": "🔬 UNET检查器"
+    "ComponentReplacer": "🔄 组件替换器",
 }
 
 # 版本信息

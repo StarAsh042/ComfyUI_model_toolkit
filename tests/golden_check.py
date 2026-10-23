@@ -66,9 +66,6 @@ def _measure() -> dict:
         "image_sha256": _tensor_sha(image),
     }
 
-    (unet_text,) = pkg.UNetInspector().inspect_unet(MODEL, "简略")
-    scenarios["unet"] = {"text_len": len(unet_text), "text_sha256": _text_sha(unet_text)}
-
     (replacer_text,) = pkg.ComponentReplacer().replace_component(
         MODEL, "UNET", "UNET-v1-SD.txt", "golden_check"
     )
