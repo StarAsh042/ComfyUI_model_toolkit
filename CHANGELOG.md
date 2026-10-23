@@ -1,5 +1,35 @@
 # 更新日志
 
+## [1.3.0] - 2026-10-24
+
+### 破坏性变更
+
+- **删除「🔬 UNET检查器」节点**：其 UNET 块结构分析已包含在模型检查器的
+  「基础」报告中（且附带组件占比与图表），属于重复功能。旧工作流中的该
+  节点将失效，请改用「🔍 模型检查器」。
+- 模型检查器新增 `model_dir` 输入。以 JSON 直接调用 `/api/prompt` 的脚本
+  不传该键时默认「（全部）」，沿用旧行为（在所有模型目录中查找），无需修改。
+
+### 新增
+
+- **模型检查器新增「模型目录」选择**：顶部新增 `model_dir` 下拉，列出
+  `ComfyUI/models/` 下第一层子目录（checkpoints / diffusion_models / loras…），
+  模型列表随选择联动；默认「（全部）」合并所有目录。已注册目录（含
+  unet/clip 历史别名）走 folder_paths，未注册目录（ipadapter/onnx 等）
+  由插件自行递归扫描。
+- 新增 `GET /api/model_toolkit/folder_files`：返回各模型目录的文件清单，
+  供前端联动下拉使用（仅在 ComfyUI 运行时注册，测试环境不引入依赖）。
+- 新增前端扩展 `js/model_dir_filter.js`（`WEB_DIRECTORY = "./js"`）：
+  含旧工作流兼容（保留已选值）与刷新按钮后重新过滤。
+
+### 工程
+
+- 新增 `model_toolkit/folders.py`（目录枚举 / 路径解析）与
+  `tests/test_folders.py`；删除 `nodes/unet_inspector.py`、
+  `tests/test_unet_blocks.py` 与 golden.json 的 unet 场景
+  （预期行为变化：节点已不存在；basic / advanced 样本哈希不变）。
+- 单测总数 89（原 79 − 5 个 UNET 用例 + 15 个新用例）；黄金样本 3/3 通过。
+
 ## [1.2.0] - 2026-10-23
 
 首个实际可用的发布。相对 1.0.0 基线，包含 8 个缺陷修复、模块化重构、架构模板与性能改进。

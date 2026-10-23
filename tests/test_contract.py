@@ -104,7 +104,7 @@ class ContractTest(unittest.TestCase):
         )
 
     def test_version(self):
-        self.assertEqual(pkg.__version__, "1.2.0")
+        self.assertEqual(pkg.__version__, "1.3.0")
 
     def test_architecture_templates_present(self):
         """模板已升级为 YAML：目录里不应再有旧的键清单 txt。"""
