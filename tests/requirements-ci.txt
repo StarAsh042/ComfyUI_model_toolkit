@@ -1,0 +1,5 @@
+# 仅 CI / 测试环境使用，不属于插件运行依赖：
+# safetensors.torch 的保存/读取测试需要 numpy；test_server 需要 aiohttp。
+# 真实 ComfyUI 宿主已自带这两个包。
+numpy>=1.23
+aiohttp>=3.9

@@ -20,7 +20,9 @@ COMFYUI_DIR="$PWD/tests/ci" python -m unittest discover -s tests -v
 
 替身会创建空的 checkpoints / loras / diffusion_models 目录与一个占位
 `.safetensors`，因此目录枚举类测试仍可执行；真实模型用例显示为 skipped。
-工作流定义见 `.github/workflows/ci.yml`（Python + Node + Ruff，聚合 job `ci`）。
+Runner 还需安装测试专用依赖 `tests/requirements-ci.txt`（numpy / aiohttp，
+不属于插件运行依赖）；工作流定义见 `.github/workflows/ci.yml`
+（Python + Node + Ruff，聚合 job `ci`）。
 
 ## 前端纯函数测试（Node 24+）
 
