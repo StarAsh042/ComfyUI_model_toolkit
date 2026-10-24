@@ -72,7 +72,7 @@ class GroupModelKeysTest(unittest.TestCase):
 
     def test_group_model_keys_other_bucket(self):
         groups = ModelUtils.group_model_keys({"unrelated.key": torch.zeros(1)})
-        self.assertEqual(groups["其他"], ["unrelated.key"])
+        self.assertEqual(groups["Other"], ["unrelated.key"])
 
     def test_group_model_keys_extracted_vae_without_prefix(self):
         """提取后的 VAE 文件键以 encoder./decoder. 开头，仍应归 VAE。"""
@@ -101,7 +101,7 @@ class RealCheckpointGroupingTest(unittest.TestCase):
         self.assertEqual(len(groups["CLIP"]), 197)
         self.assertEqual(len(groups["VAE"]), 248)
         self.assertEqual(len(groups["EMA"]), 2)
-        self.assertEqual(len(groups["其他"]), 0)
+        self.assertEqual(len(groups["Other"]), 0)
 
 
 class FormattingTest(unittest.TestCase):
@@ -141,7 +141,7 @@ class AnalysisTest(unittest.TestCase):
         sd = _sd1_like_state_dict()
         result, _debug = CheckpointInspector().analyze_architecture(sd)
         self.assertEqual(result["type"], "SD1.x")
-        self.assertTrue(any("UNET输入通道数: 4" in info for info in result["extra_info"]))
+        self.assertTrue(any("UNET input channels: 4" in info for info in result["extra_info"]))
 
     def test_analyze_model_precision(self):
         sd = {
@@ -149,9 +149,10 @@ class AnalysisTest(unittest.TestCase):
             "b": torch.zeros(10, dtype=torch.float32),
         }
         stats = CheckpointInspector().analyze_model_precision(sd)
-        self.assertEqual(stats["primary_precision"], "FP16 (半精度)")
+        self.assertEqual(stats["primary_precision"], "FP16 (Half precision)")
         self.assertEqual(
-            list(stats["distributions"]), ["FP16 (半精度)", "FP32 (单精度)"]
+            list(stats["distributions"]),
+            ["FP16 (Half precision)", "FP32 (Single precision)"],
         )
 
     def test_analyze_unet_structure(self):
@@ -160,9 +161,9 @@ class AnalysisTest(unittest.TestCase):
         total = sum(t.numel() for t in sd.values())
         lines = CheckpointInspector().analyze_unet_structure(sd, unet_keys, total)
         text = "\n".join(lines)
-        self.assertIn("- 输入块: 12 (索引: 0-11)", text)
-        self.assertIn("- 中间块: 1", text)
-        self.assertIn("- 输出块: 12 (索引: 0-11)", text)
+        self.assertIn("- Input blocks: 12 (indices: 0-11)", text)
+        self.assertIn("- Middle block: 1", text)
+        self.assertIn("- Output blocks: 12 (indices: 0-11)", text)
 
     def test_analyze_vae_structure(self):
         sd = _sd1_like_state_dict()
@@ -170,8 +171,8 @@ class AnalysisTest(unittest.TestCase):
         total = sum(t.numel() for t in sd.values())
         lines = CheckpointInspector().analyze_vae_structure(sd, vae_keys, total)
         text = "\n".join(lines)
-        self.assertIn("- 编码器键数量: 0", text)
-        self.assertIn("- 解码器键数量: 1", text)
+        self.assertIn("- Encoder keys: 0", text)
+        self.assertIn("- Decoder keys: 1", text)
 
 
 class ErrorPathTest(unittest.TestCase):
@@ -179,13 +180,13 @@ class ErrorPathTest(unittest.TestCase):
         (text,) = ComponentExtractor().extract_component(
             "no_such_model.safetensors", "UNET", "out"
         )
-        self.assertEqual(text, "❌ 无法加载模型文件")
+        self.assertEqual(text, "❌ Failed to load model file")
 
     def test_replacer_missing_model(self):
         (text,) = ComponentReplacer().replace_component(
             "no_such_model.safetensors", "UNET", "UNET-v1-SD.txt", "out"
         )
-        self.assertEqual(text, "❌ 无法加载目标模型")
+        self.assertEqual(text, "❌ Failed to load target model")
 
 
 class MetadataTest(unittest.TestCase):
@@ -238,7 +239,7 @@ class OldComfyUICompatTest(unittest.TestCase):
             )
             self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
             self.assertIn("IMPORT_OK", proc.stdout)
-            self.assertIn("检测到旧版本ComfyUI", proc.stdout)
+            self.assertIn("Legacy ComfyUI detected", proc.stdout)
 
 
 class TextReportTest(unittest.TestCase):
@@ -249,28 +250,28 @@ class TextReportTest(unittest.TestCase):
             "model_name": "demo.safetensors",
             "model_size": "1.00 GB",
             "total_params": 1_000_000,
-            "architecture": {"type": "SD1.x", "extra_info": ["UNET输入通道数: 4"]},
+            "architecture": {"type": "SD1.x", "extra_info": ["UNET input channels: 4"]},
             "components": {
                 "UNET": {"params": 800_000, "percentage": 80.0},
                 "VAE": {"params": 100_000, "percentage": 10.0},
             },
             "precision": {
-                "primary": "FP16 (半精度)",
-                "distribution": {"FP16 (半精度)": 100.0},
+                "primary": "FP16 (Half precision)",
+                "distribution": {"FP16 (Half precision)": 100.0},
             },
         }
 
     def test_report_without_ema(self):
         text = CheckpointInspector().generate_text_report(self._analysis())
         self.assertIn("demo.safetensors", text)
-        self.assertNotIn("EMA参数", text)
+        self.assertNotIn("EMA parameters", text)
 
     def test_report_with_ema(self):
         text = CheckpointInspector().generate_text_report(
             self._analysis(), ema_params=1000, ema_keys=["a", "b"]
         )
-        self.assertIn("EMA参数", text)
-        self.assertIn("键数量: 2", text)
+        self.assertIn("EMA parameters", text)
+        self.assertIn("Keys: 2", text)
 
 
 class NonTensorPayload:

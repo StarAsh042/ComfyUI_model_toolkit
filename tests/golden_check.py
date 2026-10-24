@@ -19,6 +19,10 @@ import _env  # noqa: F401  设置 sys.path
 
 import ComfyUI_model_toolkit as pkg
 
+# Windows 控制台默认 GBK，报告里的 emoji 无法编码；统一按 UTF-8 输出
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 GOLDEN = pathlib.Path(__file__).with_name("golden.json")
 MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
 
@@ -48,7 +52,7 @@ def _environment() -> dict:
 def _measure() -> dict:
     scenarios = {}
 
-    text, image = pkg.CheckpointInspector().analyze_model(MODEL, "基础", False)
+    text, image = pkg.CheckpointInspector().analyze_model(MODEL, "Basic", False)
     scenarios["basic"] = {
         "text_len": len(text),
         "text_sha256": _text_sha(text),
@@ -57,7 +61,7 @@ def _measure() -> dict:
         "image_sha256": _tensor_sha(image),
     }
 
-    text, image = pkg.CheckpointInspector().analyze_model(MODEL, "高级", True)
+    text, image = pkg.CheckpointInspector().analyze_model(MODEL, "Advanced", True)
     scenarios["advanced_chart"] = {
         "text_len": len(text),
         "text_sha256": _text_sha(text),

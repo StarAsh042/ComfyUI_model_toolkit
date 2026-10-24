@@ -107,7 +107,7 @@ class ReplaceFlowTest(unittest.TestCase):
                 folder_paths.get_full_path = original_get_full_path
                 folder_paths.output_directory = original_output_dir
 
-            self.assertTrue(text.startswith("✅ 替换 1/1 个 VAE 键"), text)
+            self.assertTrue(text.startswith("✅ Replaced 1/1 VAE keys"), text)
 
             saved = safetensors.torch.load_file(os.path.join(tmp, "result.safetensors"))
             self.assertTrue(torch.all(saved[VAE_KEY] == 1), "VAE 键应被替换")

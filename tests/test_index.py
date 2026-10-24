@@ -75,30 +75,32 @@ class AnalyzeWithoutLoadingWeightsTest(unittest.TestCase):
             safetensors.torch.save_file(_tiny_state_dict(), path)
             self._patch(tmp, path)
             try:
-                text, image = CheckpointInspector().analyze_model("tiny.safetensors", "基础", False)
+                text, image = CheckpointInspector().analyze_model("tiny.safetensors", "Basic", False)
             finally:
                 self._restore()
 
-            self.assertIn("📄 模型文件: tiny.safetensors", text)
-            self.assertIn("模型架构", text)
+            self.assertIn("📄 Model file: tiny.safetensors", text)
+            self.assertIn("Architecture", text)
             self.assertEqual(tuple(image.shape), (1, 1, 3))
 
-    def test_inspector_accepts_model_dir(self):
-        """model_dir：选了具体目录时报告多一行「📁 模型目录」，「（全部）」时没有。"""
+    def test_inspector_always_reports_model_dir(self):
+        """没有「全部」：报告始终带一行当前模型目录，默认 checkpoints。"""
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "tiny.safetensors")
             safetensors.torch.save_file(_tiny_state_dict(), path)
             self._patch(tmp, path)
             try:
-                text_all, _ = CheckpointInspector().analyze_model("tiny.safetensors", "基础", False)
+                text_default, _ = CheckpointInspector().analyze_model(
+                    "tiny.safetensors", "Basic", False
+                )
                 text_dir, _ = CheckpointInspector().analyze_model(
-                    "tiny.safetensors", "基础", False, model_dir="checkpoints"
+                    "tiny.safetensors", "Basic", False, model_dir="loras"
                 )
             finally:
                 self._restore()
 
-            self.assertNotIn("📁 模型目录", text_all)
-            self.assertIn("📁 模型目录: checkpoints", text_dir)
+            self.assertIn("📁 Model directory: checkpoints", text_default)
+            self.assertIn("📁 Model directory: loras", text_dir)
 
 
 class ModelFingerprintTest(unittest.TestCase):
@@ -137,10 +139,10 @@ class IsChangedTest(unittest.TestCase):
             original = folder_paths.get_full_path
             folder_paths.get_full_path = lambda folder, name: path
             try:
-                first = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
-                second = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
+                first = CheckpointInspector.IS_CHANGED("tiny.safetensors", "Basic", True)
+                second = CheckpointInspector.IS_CHANGED("tiny.safetensors", "Basic", True)
                 with_dir = CheckpointInspector.IS_CHANGED(
-                    "tiny.safetensors", "基础", True, model_dir="checkpoints"
+                    "tiny.safetensors", "Basic", True, model_dir="checkpoints"
                 )
             finally:
                 folder_paths.get_full_path = original

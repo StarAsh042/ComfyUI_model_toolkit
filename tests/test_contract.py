@@ -5,7 +5,7 @@ RETURN_TYPES / RETURN_NAMES / FUNCTION / OUTPUT_NODE / IS_CHANGED。
 重构不得改变任何一项；改了就说明越界（见《代码重构_ComfyUI插件.md》第八节）。
 
 1.3.0 起的预期变更（见 CHANGELOG）：删除 UNetInspector；模型检查器
-新增 model_dir 输入（顶部目录选择），其余契约不变。
+新增 model_dir 输入（顶部目录选择，默认 checkpoints）；界面与输出改为英文。
 """
 import unittest
 from pathlib import Path
@@ -46,25 +46,25 @@ def _describe_inputs(cls):
 
 EXPECTED = {
     "ModelInspector": {
-        "display": "🔍 模型检查器",
-        "category": "model_toolkit/分析",
+        "display": "🔍 Model Inspector",
+        "category": "model_toolkit/Analysis",
         "return_types": ("STRING", "IMAGE"),
-        "return_names": ("分析报告", "可视化图表"),
+        "return_names": ("Analysis Report", "Visualization Chart"),
         "function": "analyze_model",
         "output_node": False,
         "has_is_changed": True,
         "inputs": [
-            ("required", "model_dir", "folders:models", None, "（全部）", None),
+            ("required", "model_dir", "folders:models", None, "checkpoints", None),
             ("required", "model_name", "folder:checkpoints", None, None, None),
-            ("required", "show_details", "choices", ["基础", "高级"], "基础", None),
+            ("required", "show_details", "choices", ["Basic", "Advanced"], "Basic", None),
             ("required", "show_charts", "BOOLEAN", None, True, None),
         ],
     },
     "ComponentExtractor": {
-        "display": "📤 组件提取器",
-        "category": "model_toolkit/修改",
+        "display": "📤 Component Extractor",
+        "category": "model_toolkit/Editing",
         "return_types": ("STRING",),
-        "return_names": ("提取结果",),
+        "return_names": ("Extraction Result",),
         "function": "extract_component",
         "output_node": False,
         "has_is_changed": False,
@@ -75,10 +75,10 @@ EXPECTED = {
         ],
     },
     "ComponentReplacer": {
-        "display": "🔄 组件替换器",
-        "category": "model_toolkit/修改",
+        "display": "🔄 Component Replacer",
+        "category": "model_toolkit/Editing",
         "return_types": ("STRING",),
-        "return_names": ("替换结果",),
+        "return_names": ("Replacement Result",),
         "function": "replace_component",
         "output_node": False,
         "has_is_changed": False,

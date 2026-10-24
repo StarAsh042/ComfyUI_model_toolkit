@@ -3,32 +3,16 @@
  *
  * 背景：INPUT_TYPES 只在服务端启动时求值一次，model_name 的静态选项
  * 无法随 model_dir 变化；因此文件清单由 /api/model_toolkit/folder_files
- * 提供，在前端按所选目录过滤。
+ * 提供，在前端按所选目录严格过滤：下拉里只出现当前目录内的模型。
  *
- * - 「（全部）」= 按目录顺序合并去重（与 Python resolve_model_path 的回退顺序一致）
- * - 具体目录 = 该目录的文件（递归，与 ComfyUI 自己的下拉一致）
- * - 路由不可用（旧版 ComfyUI）时退回静态列表，节点仍可按 checkpoints 使用
+ * 路由不可用（旧版 ComfyUI）时退回静态 checkpoints 列表；选择其它目录
+ * 时列表为空，绝不把 checkpoints 的文件混进别的目录。
  */
 import { app } from "../../scripts/app.js";
+import { DEFAULT_DIR, installConfigureMigration } from "./widget_migration.js";
 
 const NODE_TYPE = "ModelInspector";
-const ALL_DIRS = "（全部）";
 const FILES_URL = "/api/model_toolkit/folder_files";
-
-/** 与 Python resolve_model_path 的「（全部）」回退顺序一致：按目录顺序去重合并。 */
-function mergeFolderFiles(mapping) {
-    const seen = new Set();
-    const merged = [];
-    for (const files of Object.values(mapping)) {
-        for (const file of files) {
-            if (!seen.has(file)) {
-                seen.add(file);
-                merged.push(file);
-            }
-        }
-    }
-    return merged;
-}
 
 async function fetchFolderFiles() {
     try {
@@ -40,7 +24,7 @@ async function fetchFolderFiles() {
     }
 }
 
-async function applyModelDirFilter(node, resetIfInvalid) {
+async function applyModelDirFilter(node) {
     const dirWidget = node.widgets?.find((w) => w.name === "model_dir");
     const nameWidget = node.widgets?.find((w) => w.name === "model_name");
     if (!dirWidget || !nameWidget) return;
@@ -52,31 +36,18 @@ async function applyModelDirFilter(node, resetIfInvalid) {
     const mapping = await fetchFolderFiles();
     if (seq !== node.__modelDirSeq) return;
 
-    const selected = dirWidget.value;
+    const selected = dirWidget.value || DEFAULT_DIR;
     let values;
     if (mapping) {
-        values = selected === ALL_DIRS ? mergeFolderFiles(mapping) : (mapping[selected] || []);
+        values = Array.isArray(mapping[selected]) ? mapping[selected] : [];
     } else {
-        values = nameWidget.options.values || [];
+        values = selected === DEFAULT_DIR ? [...(node.__modelDirStaticValues || [])] : [];
     }
 
-    const previous = nameWidget.__modelDirAllValues || [];
-    const current = nameWidget.value;
-
-    // 交互切换目录时，已选模型不在新目录里才重置；工作流加载时不重置
-    if (resetIfInvalid && current && !values.includes(current)) {
+    // 严格模式：已选模型不属于当前目录时立即清掉，不复用旧目录的值
+    if (!nameWidget.value || !values.includes(nameWidget.value)) {
         nameWidget.value = values.length ? values[0] : "";
     }
-    // 旧工作流里曾有效的已选值保留在列表中，避免加载后选项丢失
-    if (
-        nameWidget.value &&
-        !values.includes(nameWidget.value) &&
-        previous.includes(nameWidget.value)
-    ) {
-        values = [nameWidget.value, ...values];
-    }
-
-    nameWidget.__modelDirAllValues = values;
     nameWidget.options.values = values;
 }
 
@@ -89,23 +60,32 @@ app.registerExtension({
         nodeType.prototype.onNodeCreated = function () {
             const result = onNodeCreated?.apply(this, arguments);
             const node = this;
+            const nameWidget = node.widgets?.find((w) => w.name === "model_name");
+            if (nameWidget) {
+                // 记录服务端下发的静态列表，作为路由不可用时的 checkpoints 兜底
+                node.__modelDirStaticValues = [...(nameWidget.options?.values || [])];
+            }
+
             const dirWidget = node.widgets?.find((w) => w.name === "model_dir");
             if (dirWidget) {
                 const prevCallback = dirWidget.callback;
                 dirWidget.callback = function (...args) {
                     if (prevCallback) prevCallback.apply(this, args);
-                    applyModelDirFilter(node, true);
+                    applyModelDirFilter(node);
                 };
             }
-            applyModelDirFilter(node, false);
+            applyModelDirFilter(node);
             return result;
         };
 
-        // 工作流加载：widget 值恢复后再过滤（不重置，保留存档里的选择）
+        // 旧工作流：在 configure 恢复控件前归一化控件值
+        installConfigureMigration(nodeType);
+
+        // 工作流加载：widget 值恢复后再按目录过滤
         const onConfigure = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function (...args) {
             const result = onConfigure?.apply(this, args);
-            applyModelDirFilter(this, false);
+            applyModelDirFilter(this);
             return result;
         };
     },
@@ -119,7 +99,7 @@ if (origRefresh) {
         const result = await origRefresh(...args);
         for (const node of app.graph._nodes) {
             if (node.comfyClass === NODE_TYPE) {
-                applyModelDirFilter(node, false);
+                applyModelDirFilter(node);
             }
         }
         return result;

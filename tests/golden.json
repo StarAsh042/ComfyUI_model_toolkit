@@ -1,14 +1,14 @@
 {
   "model": "Mine\\SD1\\Alpha_Anime_2.5D_fp16_v7.safetensors",
   "environment": {
-    "comfyui": "0.42.4",
+    "comfyui": "0.42.5",
     "python": "3.11.6",
     "torch": "2.14.0+cpu"
   },
   "scenarios": {
     "basic": {
-      "text_len": 646,
-      "text_sha256": "341cb1b683a57141d5cef255e33fe06a6265f208bc7d48e4c858ecd1d4f6c7db",
+      "text_len": 986,
+      "text_sha256": "48caf0d85921fcb023c4266812728a8b48b9e0ee9640a46fd53579141e1a43a0",
       "image_shape": [
         1,
         1,
@@ -18,8 +18,8 @@
       "image_sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
     },
     "advanced_chart": {
-      "text_len": 75654,
-      "text_sha256": "c49bf0723adc748638937d9f5007182bbc559c46390090052113ce1ab360f77f",
+      "text_len": 75833,
+      "text_sha256": "848132bf1ede3b69a7c2873aba7f83b14e2cd4869e408662bb730958762a9336",
       "image_shape": [
         1,
         1280,
@@ -27,10 +27,10 @@
         4
       ],
       "image_dtype": "torch.float32",
-      "image_sha256": "5f694d83903c5efaaafbf48eb5aa14870108024be4075b2b64f5e0b11940a986"
+      "image_sha256": "2b3700ad94a572ff17d39a1a0318a404b7ae77691094d1d1e547c4dd81ec6b42"
     },
     "replacer_error": {
-      "text": "❌ 未找到替换组件: UNET-v1-SD.txt（请先运行「📤 组件提取器」生成）"
+      "text": "❌ Replacement component not found: UNET-v1-SD.txt (run the 📤 Component Extractor first)"
     }
   }
 }

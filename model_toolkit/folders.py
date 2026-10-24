@@ -6,8 +6,8 @@
   非模型目录，又漏掉 ipadapter/onnx 等未注册目录（它们同样在 models/ 下）。
 - 已注册目录（含 unet/clip 等 map_legacy 历史别名）交给 folder_paths，
   沿用它的扩展名过滤与多路径注册；未注册目录自行递归扫描。
-- 「（全部）」合并所有目录的文件，与前端 js/model_dir_filter.js 的
-  合并去重顺序保持一致（都按目录枚举顺序），同名文件解析结果可预期。
+- 默认目录固定为 checkpoints，并始终排在选项第一位；不再提供「全部」。
+- 选择某个目录后，文件名严格只在该目录内解析，不做跨目录回退。
 """
 import logging
 import os
@@ -16,8 +16,7 @@ import folder_paths
 
 logger = logging.getLogger(__package__.split(".")[0])
 
-# 「（全部）」哨兵值：合并所有目录。Python 与前端 JS 必须保持一致
-ALL_DIRS = "（全部）"
+DEFAULT_DIR = "checkpoints"
 
 # folder_paths.supported_pt_extensions 取不到时（极旧版本）的兜底扩展名
 _FALLBACK_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".sft", ".pkl", ".pt2")
@@ -36,17 +35,42 @@ def _supported_extensions():
     return set(_FALLBACK_EXTENSIONS)
 
 
+def _is_plain_dir_name(dir_name):
+    """只接受 models/ 下的一级目录名，拒绝路径分隔符与相对路径。"""
+    return (
+        isinstance(dir_name, str)
+        and bool(dir_name)
+        and dir_name not in (".", "..")
+        and "/" not in dir_name
+        and "\\" not in dir_name
+    )
+
+
+def _is_safe_model_name(model_name):
+    """允许子目录，但拒绝绝对路径与 .. 穿越（模型名可能来自工作流 JSON）。"""
+    if not isinstance(model_name, str) or not model_name:
+        return False
+    normalized = model_name.replace("\\", "/")
+    if normalized.startswith("/") or (len(normalized) > 1 and normalized[1] == ":"):
+        return False
+    return ".." not in normalized.split("/")
+
+
 def list_model_dirs():
-    """模型目录下拉的选项：['（全部）', ...models/ 第一层子目录（排序）]。"""
+    """模型目录下拉的选项：checkpoints 固定第一，其余 models/ 一级目录排序。"""
     root = _models_root()
     if not root or not os.path.isdir(root):
-        return [ALL_DIRS]
+        return [DEFAULT_DIR]
     try:
-        names = sorted(entry.name for entry in os.scandir(root) if entry.is_dir())
+        names = sorted(
+            entry.name
+            for entry in os.scandir(root)
+            if entry.is_dir() and entry.name != DEFAULT_DIR
+        )
     except OSError as e:
-        logger.warning(f"扫描模型目录失败: {e}")
-        return [ALL_DIRS]
-    return [ALL_DIRS, *names]
+        logger.warning(f"Failed to scan model directories: {e}")
+        return [DEFAULT_DIR]
+    return [DEFAULT_DIR, *names]
 
 
 def list_dir_files(dir_name):
@@ -55,7 +79,7 @@ def list_dir_files(dir_name):
     已注册目录（含 unet/clip 别名）走 folder_paths.get_filename_list；
     未注册目录自行递归扫描（folder_paths 对未注册名会抛 KeyError）。
     """
-    if not dir_name or dir_name == ALL_DIRS:
+    if not dir_name:
         return []
     try:
         return list(folder_paths.get_filename_list(dir_name))
@@ -76,36 +100,36 @@ def list_dir_files(dir_name):
 
 
 def _lookup(dir_name, model_name):
-    """在单个目录内解析文件路径；找不到返回 None。"""
+    """在单个目录内解析文件路径；找不到或越界返回 None。"""
     try:
         path = folder_paths.get_full_path(dir_name, model_name)
     except Exception:
         path = None
     if path:
         return path
+
     root = _models_root()
-    if root:
-        candidate = os.path.join(root, dir_name, model_name)
-        if os.path.isfile(candidate):
-            return candidate
+    if not root:
+        return None
+    base = os.path.realpath(os.path.join(root, dir_name))
+    candidate = os.path.realpath(os.path.join(base, model_name))
+    try:
+        inside = os.path.commonpath(
+            [os.path.normcase(base), os.path.normcase(candidate)]
+        ) == os.path.normcase(base)
+    except ValueError:
+        inside = False
+    if inside and os.path.isfile(candidate):
+        return candidate
     return None
 
 
 def resolve_model_path(model_dir, model_name):
     """把「目录 + 文件名」解析为磁盘路径；失败返回 None。
 
-    指定目录时只在该目录内找（与前端联动下拉同一语义，避免选了 loras
-    却悄悄解析到 checkpoints 的同名文件）；「（全部）」按目录枚举顺序
-    回退查找，与前端合并去重顺序一致。
+    指定目录时只在该目录内找，绝不回退到其他目录（避免选了 loras
+    却悄悄解析到 checkpoints 的同名文件）。
     """
-    if not model_name:
+    if not _is_plain_dir_name(model_dir) or not _is_safe_model_name(model_name):
         return None
-    if model_dir and model_dir != ALL_DIRS:
-        return _lookup(model_dir, model_name)
-    for dir_name in list_model_dirs():
-        if dir_name == ALL_DIRS:
-            continue
-        path = _lookup(dir_name, model_name)
-        if path:
-            return path
-    return None
+    return _lookup(model_dir, model_name)

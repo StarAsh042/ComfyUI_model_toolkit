@@ -8,7 +8,7 @@ import _env  # noqa: F401  设置 sys.path
 import folder_paths
 
 from ComfyUI_model_toolkit.model_toolkit.folders import (
-    ALL_DIRS,
+    DEFAULT_DIR,
     list_dir_files,
     list_model_dirs,
     resolve_model_path,
@@ -19,9 +19,11 @@ REAL_MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
 
 
 class ListModelDirsTest(unittest.TestCase):
-    def test_all_dirs_is_first(self):
-        """「（全部）」必须是第一项，作为下拉默认值。"""
-        self.assertEqual(list_model_dirs()[0], ALL_DIRS)
+    def test_checkpoints_is_first(self):
+        """没有「全部」选项：checkpoints 固定第一，作为下拉默认值。"""
+        dirs = list_model_dirs()
+        self.assertEqual(dirs[0], DEFAULT_DIR)
+        self.assertEqual(len(dirs), len(set(dirs)))
 
     def test_contains_registered_folders(self):
         dirs = list_model_dirs()
@@ -35,21 +37,21 @@ class ListModelDirsTest(unittest.TestCase):
             self.assertIn("onnx", list_model_dirs())
 
     def test_missing_models_dir_degrades(self):
-        """models_dir 不可用时只返回「（全部）」，不炸。"""
+        """models_dir 不可用时只返回 checkpoints，不炸。"""
         orig = folder_paths.models_dir
         folder_paths.models_dir = None
         try:
-            self.assertEqual(list_model_dirs(), [ALL_DIRS])
+            self.assertEqual(list_model_dirs(), [DEFAULT_DIR])
         finally:
             folder_paths.models_dir = orig
 
 
 class ListDirFilesTest(unittest.TestCase):
-    def test_all_dirs_returns_empty(self):
-        self.assertEqual(list_dir_files(ALL_DIRS), [])
+    def test_empty_dir_name_returns_empty(self):
+        self.assertEqual(list_dir_files(""), [])
 
     def test_checkpoints_returns_files(self):
-        files = list_dir_files("checkpoints")
+        files = list_dir_files(DEFAULT_DIR)
         self.assertIsInstance(files, list)
         self.assertTrue(files, "checkpoints 目录应有模型文件")
 
@@ -95,27 +97,28 @@ class ResolveModelPathTest(unittest.TestCase):
         """选了 loras 就只在 loras 里找：checkpoints 的同名文件不得被悄悄解析。"""
         self.assertIsNone(resolve_model_path("loras", "only_ckpt.safetensors"))
 
-    def test_all_dirs_falls_back(self):
-        """「（全部）」按目录枚举顺序回退，only_ckpt 最终在 checkpoints 命中。"""
-        self.assertEqual(
-            resolve_model_path(ALL_DIRS, "only_ckpt.safetensors"), "C:/ckpt/only_ckpt.safetensors"
-        )
-
     def test_missing_returns_none(self):
-        self.assertIsNone(resolve_model_path(ALL_DIRS, "no_such.safetensors"))
         self.assertIsNone(resolve_model_path("checkpoints", "no_such.safetensors"))
         self.assertIsNone(resolve_model_path("checkpoints", ""))
+        self.assertIsNone(resolve_model_path("", "only_ckpt.safetensors"))
+
+    def test_traversal_and_absolute_names_rejected(self):
+        """工作流 JSON 里的模型名不可信：拒绝 .. 与绝对路径。"""
+        for name in (
+            "../loras/shared.safetensors",
+            "..\\loras\\shared.safetensors",
+            "C:/ckpt/only_ckpt.safetensors",
+            "/etc/passwd",
+        ):
+            with self.subTest(name=name):
+                self.assertIsNone(resolve_model_path("checkpoints", name))
 
 
 class RealModelResolutionTest(unittest.TestCase):
     """用本机真实模型验证解析链路（模型不存在时测试失败，与既有约定一致）。"""
 
-    def test_all_dirs_resolves_real_model(self):
-        path = resolve_model_path(ALL_DIRS, REAL_MODEL)
-        self.assertTrue(path and os.path.isfile(path))
-
-    def test_checkpoints_dir_resolves_real_model(self):
-        path = resolve_model_path("checkpoints", REAL_MODEL)
+    def test_default_dir_resolves_real_model(self):
+        path = resolve_model_path(DEFAULT_DIR, REAL_MODEL)
         self.assertTrue(path and os.path.isfile(path))
 
     def test_wrong_dir_returns_none(self):

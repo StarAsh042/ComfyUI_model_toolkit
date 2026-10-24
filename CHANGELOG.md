@@ -4,31 +4,50 @@
 
 ### 破坏性变更
 
-- **删除「🔬 UNET检查器」节点**：其 UNET 块结构分析已包含在模型检查器的
-  「基础」报告中（且附带组件占比与图表），属于重复功能。旧工作流中的该
-  节点将失效，请改用「🔍 模型检查器」。
-- 模型检查器新增 `model_dir` 输入。以 JSON 直接调用 `/api/prompt` 的脚本
-  不传该键时默认「（全部）」，沿用旧行为（在所有模型目录中查找），无需修改。
+- **删除「🔬 UNET Inspector」节点**：其 UNET 块结构分析已包含在模型检查器的
+  `Basic` 报告中（且附带组件占比与图表），属于重复功能。旧工作流中的该
+  节点将失效，请改用「🔍 Model Inspector」。
+- **模型检查器不再提供「（全部）」目录**：`model_dir` 默认 `checkpoints`，
+  模型列表严格只显示所选目录内的模型；以 JSON 直接调用 `/api/prompt`
+  的脚本不传该键时也按 `checkpoints` 解析，不再跨目录回退。
+- **界面与输出改为英文**：节点显示名、分类、显示模式（`Basic` / `Advanced`）、
+  输出名、文本报告、图表与错误信息均为英文。中文 i18n 翻译在后续版本提供。
 
 ### 新增
 
 - **模型检查器新增「模型目录」选择**：顶部新增 `model_dir` 下拉，列出
   `ComfyUI/models/` 下第一层子目录（checkpoints / diffusion_models / loras…），
-  模型列表随选择联动；默认「（全部）」合并所有目录。已注册目录（含
-  unet/clip 历史别名）走 folder_paths，未注册目录（ipadapter/onnx 等）
-  由插件自行递归扫描。
+  默认 `checkpoints`，模型列表随选择严格联动。已注册目录（含 unet/clip
+  历史别名）走 folder_paths，未注册目录（ipadapter/onnx 等）由插件自行
+  递归扫描。
 - 新增 `GET /api/model_toolkit/folder_files`：返回各模型目录的文件清单，
   供前端联动下拉使用（仅在 ComfyUI 运行时注册，测试环境不引入依赖）。
 - 新增前端扩展 `js/model_dir_filter.js`（`WEB_DIRECTORY = "./js"`）：
-  含旧工作流兼容（保留已选值）与刷新按钮后重新过滤。
+  目录切换后只保留当前目录的文件，刷新按钮后重新过滤；路由不可用时仅
+  `checkpoints` 退回静态列表。
+- 路径解析增加模型名边界校验：拒绝绝对路径与 `..` 穿越（模型名可能来自
+  工作流 JSON）。
+
+### 修复
+
+- **1.2.0 工作流控件错位**：`model_dir` 加在首位后，旧工作流按位置保存的
+  三值数组会整体串位。节点加载时在 `configure` 恢复控件前识别旧格式并
+  右移一位，`model_dir` 补为 `checkpoints`，中文显示模式转为 `Basic` /
+  `Advanced`。
+- **旧 1.3.0 工作流迁移**：`（全部）` 改为 `checkpoints`；新版前端保存的
+  `widgets_values_named` 同样归一化，避免命名恢复绕过位置迁移。
+- `tests/golden_check.py` 在 Windows GBK 控制台下输出 emoji 会崩溃，
+  现统一按 UTF-8 输出。
 
 ### 工程
 
-- 新增 `model_toolkit/folders.py`（目录枚举 / 路径解析）与
+- 新增 `model_toolkit/folders.py`（目录枚举 / 严格路径解析）与
   `tests/test_folders.py`；删除 `nodes/unet_inspector.py`、
-  `tests/test_unet_blocks.py` 与 golden.json 的 unet 场景
-  （预期行为变化：节点已不存在；basic / advanced 样本哈希不变）。
-- 单测总数 89（原 79 − 5 个 UNET 用例 + 15 个新用例）；黄金样本 3/3 通过。
+  `tests/test_unet_blocks.py` 与 golden.json 的 unet 场景。
+- 新增 `js/widget_migration.js`、Node 单测 12 项与 1.2.0 工作流夹具。
+- Python 单测 88 项全部通过；Node 前端测试 12/12；黄金样本 3/3 通过。
+- **黄金基线重建**：报告/图表改为英文且默认目录变为 checkpoints，文本与
+  图像哈希变化属预期；环境记录同步为 ComfyUI 0.42.5。
 
 ## [1.2.0] - 2026-10-23
 

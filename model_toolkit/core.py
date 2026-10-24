@@ -112,7 +112,7 @@ class ModelUtils:
             with safetensors.safe_open(str(model_path), framework="pt", device="cpu") as f:
                 return dict(f.metadata() or {})
         except Exception as e:
-            logger.error(f"读取模型元信息时出错: {str(e)}")
+            logger.error(f"Failed to read model metadata: {str(e)}")
             return {}
 
     @staticmethod
@@ -141,7 +141,7 @@ class ModelUtils:
                 header_len = int.from_bytes(f.read(8), "little")
                 header = json.loads(f.read(header_len).decode("utf-8"))
         except Exception as e:
-            logger.error(f"读取模型头部时出错: {str(e)}")
+            logger.error(f"Failed to read model header: {str(e)}")
             return None
 
         header.pop("__metadata__", None)
@@ -178,7 +178,7 @@ class ModelUtils:
                     model_data = model_data["state_dict"]
             return model_data
         except Exception as e:
-            logger.error(f"加载模型时出错: {str(e)}")
+            logger.error(f"Failed to load model: {str(e)}")
             return None
 
     @staticmethod
@@ -195,7 +195,7 @@ class ModelUtils:
 
     @classmethod
     def classify_key(cls, key, unet_prefix=None):
-        """把单个键归入组件；无法判定时归入 '其他'。"""
+        """把单个键归入组件；无法判定时归入 'Other'。"""
         for comp_name, prefixes in cls.COMPONENT_PREFIXES.items():
             if key.startswith(prefixes):
                 return comp_name
@@ -208,7 +208,7 @@ class ModelUtils:
             return 'CLIP'
         if 'diffusion_model.' in key:
             return 'UNET'
-        return '其他'
+        return 'Other'
 
     @classmethod
     def group_model_keys(cls, model_data):
@@ -235,7 +235,7 @@ class ModelUtils:
     def analyze_architecture(cls, model_data):
         """分析模型架构"""
         if not model_data:
-            return "未知"
+            return "Unknown"
         
         for arch_type, feature in cls.ARCH_FEATURES.items():
             if any(feature in k for k in model_data.keys()):
@@ -255,7 +255,7 @@ class ModelUtils:
                 torch.save({"state_dict": component_data}, output_path)
             return True
         except Exception as e:
-            logger.error(f"保存组件时出错: {str(e)}")
+            logger.error(f"Failed to save component: {str(e)}")
             return False
 
     @classmethod
@@ -305,5 +305,5 @@ class ModelUtils:
                     return False
             return True
         except Exception as e:
-            logger.error(f"验证兼容性时出错: {str(e)}")
+            logger.error(f"Failed to validate compatibility: {str(e)}")
             return False

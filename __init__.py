@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 
 # 版本兼容性检查（必须先于 folder_paths API 调用）
 if not hasattr(folder_paths, 'add_model_folder_path'):
-    logger.warning("检测到旧版本ComfyUI，部分功能可能受限")
+    logger.warning("Legacy ComfyUI detected; some features may be limited")
 
 if not hasattr(folder_paths, 'get_filename_list'):
-    logger.error("不兼容的ComfyUI版本，请升级到v1.0+")
+    logger.error("Incompatible ComfyUI version; please upgrade to v1.0+")
 
 # 提取产物目录：组件提取器写这里，替换器也只从这里选（修复 B2）
 if hasattr(folder_paths, 'add_model_folder_path'):
@@ -63,7 +63,7 @@ def _register_folder_files_route():
     if getattr(PromptServer, "instance", None) is None:
         return
 
-    from .model_toolkit.folders import ALL_DIRS, list_dir_files, list_model_dirs
+    from .model_toolkit.folders import list_dir_files, list_model_dirs
 
     try:
 
@@ -72,12 +72,11 @@ def _register_folder_files_route():
             folders = {
                 dir_name: list_dir_files(dir_name)
                 for dir_name in list_model_dirs()
-                if dir_name != ALL_DIRS
             }
             return web.json_response(folders)
 
     except Exception as e:
-        logger.warning(f"注册模型目录文件清单路由失败（模型目录联动将不可用）: {e}")
+        logger.warning(f"Failed to register the model directory file-list route (directory filtering will be unavailable): {e}")
 
 
 _register_folder_files_route()
@@ -96,9 +95,9 @@ NODE_CLASS_MAPPINGS = {
 
 # 显示名称映射
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ModelInspector": "🔍 模型检查器",
-    "ComponentExtractor": "📤 组件提取器",
-    "ComponentReplacer": "🔄 组件替换器",
+    "ModelInspector": "🔍 Model Inspector",
+    "ComponentExtractor": "📤 Component Extractor",
+    "ComponentReplacer": "🔄 Component Replacer",
 }
 
 # 版本信息
