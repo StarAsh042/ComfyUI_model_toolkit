@@ -1,0 +1,37 @@
+{
+  "last_node_id": 1,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "ModelInspector",
+      "pos": [120, 120],
+      "size": [360, 190],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "分析报告",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "可视化图表",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ModelInspector"
+      },
+      "widgets_values": ["Mine\\SD1\\Alpha_Anime_2.5D_fp16_v7.safetensors", "基础", true]
+    }
+  ],
+  "links": [],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

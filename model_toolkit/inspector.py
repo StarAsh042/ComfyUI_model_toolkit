@@ -11,6 +11,7 @@ from . import architectures
 from .charts import ChartsMixin
 from .precision import PrecisionMixin
 from .core import ModelUtils
+from .folders import DEFAULT_DIR, list_model_dirs, resolve_model_path
 
 logger = logging.getLogger(__name__)
 
@@ -22,49 +23,59 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
     - 可视化报告生成
     - 组件结构分析
     """
-    CATEGORY = "model_toolkit/分析"
+    CATEGORY = "model_toolkit/Analysis"
     
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
+                # 顶部目录选择：models/ 下第一层子目录。模型列表由前端
+                # js/model_dir_filter.js 按此值联动——INPUT_TYPES 只在
+                # 启动时求值一次，服务端无法做控件间联动。
+                "model_dir": (list_model_dirs(), {"default": DEFAULT_DIR}),
                 "model_name": (folder_paths.get_filename_list("checkpoints"),),
-                "show_details": (["基础", "高级"], {"default": "基础"}),
+                "show_details": (["Basic", "Advanced"], {"default": "Basic"}),
                 "show_charts": ("BOOLEAN", {"default": True})
             }
         }
     
     RETURN_TYPES = ("STRING", "IMAGE")
-    RETURN_NAMES = ("分析报告", "可视化图表")
+    RETURN_NAMES = ("Analysis Report", "Visualization Chart")
     FUNCTION = "analyze_model"
 
     @classmethod
-    def IS_CHANGED(cls, model_name, show_details, show_charts):
+    def IS_CHANGED(cls, model_name, show_details, show_charts, model_dir=DEFAULT_DIR):
         """模型文件内容变化时让 ComfyUI 重跑（mtime+大小指纹）。
 
         节点只在文件名相同的输入下才会命中缓存，而文件名不变、内容被替换
         （重新下载 / 覆盖同名模型）时旧实现会一直返回旧报告（T10）。
         """
-        return ModelUtils.model_fingerprint(folder_paths.get_full_path("checkpoints", model_name))
+        return ModelUtils.model_fingerprint(resolve_model_path(model_dir, model_name))
 
-    def analyze_model(self, model_name, show_details, show_charts):
-        """分析模型结构(主方法)"""
+    def analyze_model(self, model_name, show_details, show_charts, model_dir=DEFAULT_DIR):
+        """分析模型结构(主方法)
+
+        model_dir 放在签名末尾并给默认值：保持既有位置参数调用
+        （测试 / golden_check / 外部脚本）兼容；控件顺序由 INPUT_TYPES
+        决定，与函数签名顺序无关。
+        """
         try:
-            model_path = folder_paths.get_full_path("checkpoints", model_name)
+            model_path = resolve_model_path(model_dir, model_name)
             # 只读头部即可完成分析（P4）：不把权重读进内存
             model_data = ModelUtils.load_model_index(model_path)
 
             if not model_data:
-                return ("❌ 无法加载模型文件", torch.zeros((1, 1, 3)))
+                return ("❌ Failed to load model file", torch.zeros((1, 1, 3)))
 
             result = []
-            result.append(f"📄 模型文件: {model_name}")
-            result.append(f"📊 模型大小: {ModelUtils.format_size(os.path.getsize(model_path))}")
+            result.append(f"📄 Model file: {model_name}")
+            result.append(f"📁 Model directory: {model_dir}")
+            result.append(f"📊 Model size: {ModelUtils.format_size(os.path.getsize(model_path))}")
             total_params = sum(t.numel() for t in model_data.values())
             
             precision_stats = self.analyze_model_precision(model_data)
             
-            result.append(f"🔢 参数总量: {self.format_params(total_params)} [{precision_stats['primary_precision']}]")
+            result.append(f"🔢 Total parameters: {self.format_params(total_params)} [{precision_stats['primary_precision']}]")
             
             arch_result = self.analyze_architecture(model_data)
             if isinstance(arch_result, tuple):
@@ -72,7 +83,7 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
             else:
                 arch_info = arch_result
             
-            result.append(f"\n🏗️ 模型架构: {arch_info['type']}")
+            result.append(f"\n🏗️ Architecture: {arch_info['type']}")
             if arch_info.get('extra_info'):
                 for info in arch_info['extra_info']:
                     result.append(f"  • {info}")
@@ -94,10 +105,10 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                     comp_params[k] = (0, 0.0)
             
             # 计算其他参数
-            other_params = comp_params.get('其他', (0, 0.0))[0]
+            other_params = comp_params.get('Other', (0, 0.0))[0]
             if other_params > 0:
                 other_percent = other_params / total_params * 100
-                comp_params['其他'] = (other_params, other_percent)
+                comp_params['Other'] = (other_params, other_percent)
             
             # 计算EMA参数（model_ema.* 前缀/命名模式）
             ema_keys = []
@@ -127,9 +138,9 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                 comp_params['EMA'] = (ema_params, ema_params / total_params * 100)
                 
                 # 更新文本报告
-                result.append(f"\n⚡ EMA参数:")
-                result.append(f"- EMA参数量: {self.format_params(ema_params)} ({ema_params/total_params*100:.1f}%)")
-                result.append(f"- EMA键数量: {len(ema_keys)}")
+                result.append(f"\n⚡ EMA parameters:")
+                result.append(f"- EMA parameters: {self.format_params(ema_params)} ({ema_params/total_params*100:.1f}%)")
+                result.append(f"- EMA keys: {len(ema_keys)}")
             
             # 获取未归类键名
             classified_keys = set()
@@ -141,16 +152,16 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
             
             # 如果有未归类参数，添加到结果
             if unknown_params > 0:
-                comp_params['未知'] = (unknown_params, unknown_params/total_params*100)
-                result.append(f"\n🔍 未归类参数:")
-                result.append(f"- 未归类参数量: {self.format_params(unknown_params)} ({unknown_params/total_params*100:.1f}%)")
-                result.append(f"- 未归类键数量: {len(unknown_keys)}")
+                comp_params['Unknown'] = (unknown_params, unknown_params/total_params*100)
+                result.append(f"\n🔍 Unclassified parameters:")
+                result.append(f"- Unclassified parameters: {self.format_params(unknown_params)} ({unknown_params/total_params*100:.1f}%)")
+                result.append(f"- Unclassified keys: {len(unknown_keys)}")
             
             # 如果有其他参数，添加到结果
             if other_params > 0:
-                result.append(f"\n📦 其他参数:")
-                result.append(f"- 其他参数量: {self.format_params(other_params)} ({other_percent:.1f}%)")
-                result.append(f"- 其他键数量: {len(groups.get('其他', []))}")
+                result.append(f"\n📦 Other parameters:")
+                result.append(f"- Other parameters: {self.format_params(other_params)} ({other_percent:.1f}%)")
+                result.append(f"- Other keys: {len(groups.get('Other', []))}")
             
             # 元数据提取：safetensors 读头部 __metadata__，其余格式回退到键扫描
             metadata = ModelUtils.read_safetensors_metadata(model_path)
@@ -160,7 +171,7 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                         metadata[k] = model_data[k]
             
             if metadata:
-                result.append(f"\n📌 模型元信息:")
+                result.append(f"\n📌 Model metadata:")
                 for key, value in metadata.items():
                     if hasattr(value, 'tolist'):
                         try:
@@ -169,10 +180,10 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                             value = str(value)
                     result.append(f"- {key}: {value}")
             else:
-                result.append(f"\n📌 模型未包含元信息")
+                result.append(f"\n📌 Model contains no metadata")
 
-            # 详细分析（基础/高级模式）
-            if show_details == "基础":
+            # 详细分析（Basic/Advanced 模式）
+            if show_details == "Basic":
                 # UNET分析
                 if 'UNET' in groups and groups['UNET']:
                     unet_results = self.analyze_unet_structure(model_data, groups['UNET'], total_params)
@@ -188,20 +199,20 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                     clip_results = self.analyze_clip_structure(model_data, groups['CLIP'], total_params, arch_info['type'])
                     result.extend(clip_results)
 
-            elif show_details == "高级":
-                result.append("\n🔍 模型所有键名:")
+            elif show_details == "Advanced":
+                result.append("\n🔍 All model keys:")
                 all_keys = set(model_data.keys())
                 
                 for comp_name, keys in groups.items():
                     if keys:
-                        result.append(f"\n=== {comp_name} 键名 ===")
+                        result.append(f"\n=== {comp_name} keys ===")
                         for key in sorted(keys):
                             if key in model_data:
                                 result.append(f"  {key}")
                                 all_keys.discard(key)
 
                 if all_keys:
-                    result.append("\n=== 未分类键名 ===")
+                    result.append("\n=== Unclassified keys ===")
                     for key in sorted(all_keys):
                         result.append(f"  {key}")
 
@@ -236,9 +247,9 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                 total_unet_params = input_params + middle_params + output_params
                 if total_unet_params > 0:
                     unet_parts = {
-                        '输入块': input_params / total_unet_params,
-                        '中间块': middle_params / total_unet_params,
-                        '输出块': output_params / total_unet_params
+                        'Input blocks': input_params / total_unet_params,
+                        'Middle block': middle_params / total_unet_params,
+                        'Output blocks': output_params / total_unet_params
                     }
                     analysis_data['unet_parts'] = unet_parts
             
@@ -250,13 +261,13 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
                     if chart_data:
                         image_tensor = self.convert_image(chart_data)
                 except Exception as e:
-                    logger.error(f"生成图表失败: {str(e)}")
+                    logger.error(f"Failed to generate chart: {str(e)}")
             
             return ("\n".join(result), image_tensor)
             
         except Exception as e:
-            logger.error(f"分析失败: {str(e)}")
-            return (f"❌ 分析失败: {str(e)}", torch.zeros((1, 1, 3)))
+            logger.error(f"Analysis failed: {str(e)}")
+            return (f"❌ Analysis failed: {str(e)}", torch.zeros((1, 1, 3)))
 
 
     def update_progress(self, progress, desc):
@@ -264,39 +275,39 @@ class CheckpointInspector(AnalysisMixin, PrecisionMixin, ChartsMixin):
         if hasattr(self, "progress_bar"):
             self.progress_bar.update(progress, desc)
         else:
-            logger.info(f"[进度 {progress}%] {desc}")
+            logger.info(f"[Progress {progress}%] {desc}")
 
     def generate_text_report(self, analysis_result, ema_params=0, ema_keys=()):
         """生成文本格式的详细分析报告"""
         report = []
         total_params = analysis_result['total_params']
         # 基础信息
-        report.append(f"📄 模型文件: {analysis_result['model_name']}")
-        report.append(f"📊 模型大小: {analysis_result['model_size']}")
-        report.append(f"🔢 参数总量: {analysis_result['total_params']}")
+        report.append(f"📄 Model file: {analysis_result['model_name']}")
+        report.append(f"📊 Model size: {analysis_result['model_size']}")
+        report.append(f"🔢 Total parameters: {analysis_result['total_params']}")
         
         # 架构信息
-        report.append(f"\n🏗️ 模型架构: {analysis_result['architecture']['type']}")
+        report.append(f"\n🏗️ Architecture: {analysis_result['architecture']['type']}")
         for info in analysis_result['architecture'].get('extra_info', []):
             report.append(f"  • {info}")
         
         # 组件分析
         for comp in ['UNET', 'VAE', 'CLIP']:
             if comp in analysis_result['components']:
-                report.append(f"\n{comp}结构:")
-                report.append(f"- 参数量: {analysis_result['components'][comp]['params']}")
-                report.append(f"- 占比: {analysis_result['components'][comp]['percentage']}%")
+                report.append(f"\n{comp} structure:")
+                report.append(f"- Parameters: {analysis_result['components'][comp]['params']}")
+                report.append(f"- Share: {analysis_result['components'][comp]['percentage']}%")
         
         # 精度分析
-        report.append("\n🔧 精度分析:")
-        report.append(f"- 主要精度: {analysis_result['precision']['primary']}")
+        report.append("\n🔧 Precision analysis:")
+        report.append(f"- Primary precision: {analysis_result['precision']['primary']}")
         for dist in analysis_result['precision']['distribution']:
             report.append(f"- {dist}: {analysis_result['precision']['distribution'][dist]}%")
         
         # 添加EMA参数统计到文本报告
         if ema_params > 0:
-            report.append(f"\n⚡ EMA参数:")
-            report.append(f"- 参数量: {self.format_params(ema_params)} ({ema_params/total_params*100:.1f}%)")
-            report.append(f"- 键数量: {len(ema_keys)}")
+            report.append(f"\n⚡ EMA parameters:")
+            report.append(f"- Parameters: {self.format_params(ema_params)} ({ema_params/total_params*100:.1f}%)")
+            report.append(f"- Keys: {len(ema_keys)}")
         
         return "\n".join(report) 

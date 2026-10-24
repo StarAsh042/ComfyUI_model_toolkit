@@ -3,6 +3,9 @@
 只记录重构前的现状：节点名、显示名、CATEGORY、输入顺序 / 类型 / 默认值、
 RETURN_TYPES / RETURN_NAMES / FUNCTION / OUTPUT_NODE / IS_CHANGED。
 重构不得改变任何一项；改了就说明越界（见《代码重构_ComfyUI插件.md》第八节）。
+
+1.3.0 起的预期变更（见 CHANGELOG）：删除 UNetInspector；模型检查器
+新增 model_dir 输入（顶部目录选择，默认 checkpoints）；界面与输出改为英文。
 """
 import unittest
 from pathlib import Path
@@ -12,6 +15,7 @@ import _env  # noqa: F401  设置 sys.path
 import folder_paths
 
 import ComfyUI_model_toolkit as pkg
+from ComfyUI_model_toolkit.model_toolkit.folders import list_model_dirs
 
 
 def _describe_inputs(cls):
@@ -30,6 +34,8 @@ def _describe_inputs(cls):
                     kind, choices = "folder:checkpoints", None
                 elif list(spec) == folder_paths.get_filename_list("model_toolkit_extracted"):
                     kind, choices = "folder:model_toolkit_extracted", None
+                elif list(spec) == list_model_dirs():
+                    kind, choices = "folders:models", None
                 else:
                     kind, choices = "choices", list(spec)
             else:
@@ -40,24 +46,25 @@ def _describe_inputs(cls):
 
 EXPECTED = {
     "ModelInspector": {
-        "display": "🔍 模型检查器",
-        "category": "model_toolkit/分析",
+        "display": "🔍 Model Inspector",
+        "category": "model_toolkit/Analysis",
         "return_types": ("STRING", "IMAGE"),
-        "return_names": ("分析报告", "可视化图表"),
+        "return_names": ("Analysis Report", "Visualization Chart"),
         "function": "analyze_model",
         "output_node": False,
         "has_is_changed": True,
         "inputs": [
+            ("required", "model_dir", "folders:models", None, "checkpoints", None),
             ("required", "model_name", "folder:checkpoints", None, None, None),
-            ("required", "show_details", "choices", ["基础", "高级"], "基础", None),
+            ("required", "show_details", "choices", ["Basic", "Advanced"], "Basic", None),
             ("required", "show_charts", "BOOLEAN", None, True, None),
         ],
     },
     "ComponentExtractor": {
-        "display": "📤 组件提取器",
-        "category": "model_toolkit/修改",
+        "display": "📤 Component Extractor",
+        "category": "model_toolkit/Editing",
         "return_types": ("STRING",),
-        "return_names": ("提取结果",),
+        "return_names": ("Extraction Result",),
         "function": "extract_component",
         "output_node": False,
         "has_is_changed": False,
@@ -68,10 +75,10 @@ EXPECTED = {
         ],
     },
     "ComponentReplacer": {
-        "display": "🔄 组件替换器",
-        "category": "model_toolkit/修改",
+        "display": "🔄 Component Replacer",
+        "category": "model_toolkit/Editing",
         "return_types": ("STRING",),
-        "return_names": ("替换结果",),
+        "return_names": ("Replacement Result",),
         "function": "replace_component",
         "output_node": False,
         "has_is_changed": False,
@@ -82,19 +89,6 @@ EXPECTED = {
             ("required", "output_name", "STRING", None, "modified_model", False),
         ],
     },
-    "UNetInspector": {
-        "display": "🔬 UNET检查器",
-        "category": "model_toolkit/分析",
-        "return_types": ("STRING",),
-        "return_names": ("分析结果",),
-        "function": "inspect_unet",
-        "output_node": False,
-        "has_is_changed": True,
-        "inputs": [
-            ("required", "model_name", "folder:checkpoints", None, "", None),
-            ("required", "show_details", "choices", ["简略", "详细"], "简略", None),
-        ],
-    },
 }
 
 
@@ -102,15 +96,15 @@ class ContractTest(unittest.TestCase):
     def test_mapping_keys_and_order(self):
         self.assertEqual(
             list(pkg.NODE_CLASS_MAPPINGS),
-            ["ModelInspector", "ComponentExtractor", "ComponentReplacer", "UNetInspector"],
+            ["ModelInspector", "ComponentExtractor", "ComponentReplacer"],
         )
         self.assertEqual(
             list(pkg.NODE_DISPLAY_NAME_MAPPINGS),
-            ["ModelInspector", "ComponentExtractor", "ComponentReplacer", "UNetInspector"],
+            ["ModelInspector", "ComponentExtractor", "ComponentReplacer"],
         )
 
     def test_version(self):
-        self.assertEqual(pkg.__version__, "1.2.0")
+        self.assertEqual(pkg.__version__, "1.3.0")
 
     def test_architecture_templates_present(self):
         """模板已升级为 YAML：目录里不应再有旧的键清单 txt。"""

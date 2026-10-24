@@ -29,9 +29,9 @@ class ComponentExtractor:
         }
     
     RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("提取结果",)
+    RETURN_NAMES = ("Extraction Result",)
     FUNCTION = "extract_component"
-    CATEGORY = "model_toolkit/修改"
+    CATEGORY = "model_toolkit/Editing"
     
     def extract_component(self, model_name, component, output_name):
         """从模型中提取组件
@@ -50,12 +50,12 @@ class ComponentExtractor:
             model_data = ModelUtils.load_model(model_path)
             
             if not model_data:
-                return ("❌ 无法加载模型文件",)
+                return ("❌ Failed to load model file",)
                 
             # 获取组件键值
             groups = ModelUtils.group_model_keys(model_data)
             if component not in groups or not groups[component]:
-                return (f"❌ 未找到{component}组件",)
+                return (f"❌ {component} component not found",)
                 
             # 提取组件数据
             extracted = {k: model_data[k] for k in groups[component]}
@@ -65,7 +65,7 @@ class ComponentExtractor:
             note = ""
             if spec:
                 hit, total = spec.contract(component, extracted.keys())
-                note = f"，模板 {spec.identifier} 核对 {hit}/{total} 键"
+                note = f", template {spec.identifier} matched {hit}/{total} keys"
             
             # 自动生成输出路径
             if not output_name:
@@ -83,9 +83,9 @@ class ComponentExtractor:
 
             save_path = os.path.join(save_dir, output_name)
             if ModelUtils.save_component(extracted, save_path):
-                return (f"✅ 成功保存{component}组件（{len(extracted)} 个键{note}）到: {save_path}",)
+                return (f"✅ Saved {component} component ({len(extracted)} keys{note}) to: {save_path}",)
             else:
-                return ("❌ 保存组件失败",)
+                return ("❌ Failed to save component",)
                 
         except Exception as e:
-            return (f"❌ 提取失败: {str(e)}",)
+            return (f"❌ Extraction failed: {str(e)}",)

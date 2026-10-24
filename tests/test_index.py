@@ -12,7 +12,6 @@ import torch
 
 from ComfyUI_model_toolkit import ModelUtils
 from ComfyUI_model_toolkit.nodes.checkpoint_inspector import CheckpointInspector
-from ComfyUI_model_toolkit.nodes.unet_inspector import UNetInspector
 
 
 def _tiny_state_dict():
@@ -76,26 +75,32 @@ class AnalyzeWithoutLoadingWeightsTest(unittest.TestCase):
             safetensors.torch.save_file(_tiny_state_dict(), path)
             self._patch(tmp, path)
             try:
-                text, image = CheckpointInspector().analyze_model("tiny.safetensors", "基础", False)
+                text, image = CheckpointInspector().analyze_model("tiny.safetensors", "Basic", False)
             finally:
                 self._restore()
 
-            self.assertIn("📄 模型文件: tiny.safetensors", text)
-            self.assertIn("模型架构", text)
+            self.assertIn("📄 Model file: tiny.safetensors", text)
+            self.assertIn("Architecture", text)
             self.assertEqual(tuple(image.shape), (1, 1, 3))
 
-    def test_unet_inspector_reads_header_only(self):
+    def test_inspector_always_reports_model_dir(self):
+        """没有「全部」：报告始终带一行当前模型目录，默认 checkpoints。"""
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "tiny.safetensors")
             safetensors.torch.save_file(_tiny_state_dict(), path)
             self._patch(tmp, path)
             try:
-                (text,) = UNetInspector().inspect_unet("tiny.safetensors", "简略")
+                text_default, _ = CheckpointInspector().analyze_model(
+                    "tiny.safetensors", "Basic", False
+                )
+                text_dir, _ = CheckpointInspector().analyze_model(
+                    "tiny.safetensors", "Basic", False, model_dir="loras"
+                )
             finally:
                 self._restore()
 
-            self.assertIn("UNET参数量", text)
-            self.assertIn("input块: 1", text)
+            self.assertIn("📁 Model directory: checkpoints", text_default)
+            self.assertIn("📁 Model directory: loras", text_dir)
 
 
 class ModelFingerprintTest(unittest.TestCase):
@@ -134,15 +139,18 @@ class IsChangedTest(unittest.TestCase):
             original = folder_paths.get_full_path
             folder_paths.get_full_path = lambda folder, name: path
             try:
-                first = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
-                second = CheckpointInspector.IS_CHANGED("tiny.safetensors", "基础", True)
-                unet = UNetInspector.IS_CHANGED("tiny.safetensors", "简略")
+                first = CheckpointInspector.IS_CHANGED("tiny.safetensors", "Basic", True)
+                second = CheckpointInspector.IS_CHANGED("tiny.safetensors", "Basic", True)
+                with_dir = CheckpointInspector.IS_CHANGED(
+                    "tiny.safetensors", "Basic", True, model_dir="checkpoints"
+                )
             finally:
                 folder_paths.get_full_path = original
 
             self.assertEqual(first, second)
             self.assertTrue(first)
-            self.assertEqual(first, unet)
+            # model_dir 只决定在哪个目录里找文件；同一个文件的指纹必须一致
+            self.assertEqual(first, with_dir)
 
 
 if __name__ == "__main__":

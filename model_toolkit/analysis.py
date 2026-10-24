@@ -12,7 +12,7 @@ class AnalysisMixin:
         - SD2.x (通过v_pred检测)
         - SDXL (通过双CLIP检测)
         """
-        result = {'type': '未知', 'extra_info': []}
+        result = {'type': 'Unknown', 'extra_info': []}
         total_params = sum(t.numel() for t in model_data.values())
 
         # 调试标记 - 收集关键信息
@@ -32,7 +32,7 @@ class AnalysisMixin:
                             block_idx = int(parts[i+1])
                             block_indices.add(block_idx)
             except Exception as e:
-                print(f"块索引解析错误: {e}")
+                print(f"Failed to parse block index: {e}")
         
         block_count = len(block_indices)
         max_block_idx = max(block_indices) if block_indices else -1
@@ -149,48 +149,48 @@ class AnalysisMixin:
         # SDXL判定（修改后）
         if sdxl_features['dual_clip'] and (sdxl_features['block_count'] or sdxl_features['param_count']):
             result['type'] = "SDXL"
-            decision_log.append("发现双CLIP结构，SDXL特征明显")
+            decision_log.append("Dual CLIP detected: SDXL features present")
             
             # 检查UNET输入通道
             if input_channels == 9:
-                result['extra_info'].append(f"UNET输入通道数: {input_channels} (6个条件通道 + 1个噪声通道 + 2个分辨率通道)")
+                result['extra_info'].append(f"UNET input channels: {input_channels} (6 conditioning + 1 noise + 2 resolution channels)")
             elif input_channels == 4:
-                result['extra_info'].append(f"UNET输入通道数: {input_channels} (3个条件通道 + 1个噪声通道) [注意: 与标准SDXL的9通道不符]")
-                decision_log.append("输入通道数(4)异常，可能是特殊转换版本")
+                result['extra_info'].append(f"UNET input channels: {input_channels} (3 conditioning + 1 noise channels) [note: standard SDXL uses 9 channels]")
+                decision_log.append("Input channels (4) are unusual; possible converted variant")
             else:
-                result['extra_info'].append(f"UNET输入通道数: {input_channels} [非标准配置]")
+                result['extra_info'].append(f"UNET input channels: {input_channels} [non-standard configuration]")
             
             # 修改：不再显示EMA参数，改为显示CLIP和VAE的通道信息
-            result['extra_info'].append("CLIP文本输入维度: 768 (最大长度: 77)")
-            result['extra_info'].append("VAE输入通道数: 3 (RGB图像输入)")
+            result['extra_info'].append("CLIP text input dim: 768 (max length: 77)")
+            result['extra_info'].append("VAE input channels: 3 (RGB image input)")
             
             if channel_key:
-                decision_log.append(f"检测到的输入层: {channel_key}")
+                decision_log.append(f"Detected input layer: {channel_key}")
             
             return result, debug_info
         
         # SD2.x判定
         if sd2_features['v_pred']:
             result['type'] = "SD2.x"
-            decision_log.append("发现v_pred预测器，识别为SD2.x")
-            result['extra_info'].append(f"UNET输入通道数: {input_channels} (3个条件通道 + 1个噪声通道)")
-            result['extra_info'].append("检测到v_pred预测器")
+            decision_log.append("v_pred predictor detected: identified as SD2.x")
+            result['extra_info'].append(f"UNET input channels: {input_channels} (3 conditioning + 1 noise channels)")
+            result['extra_info'].append("v_pred predictor detected")
             return result, debug_info
         
         # SD1.x判定（修改后）
         if sd1_features['block_count'] and sd1_features['input_channels']:
             # 不再输出EMA数量，而是直接显示UNET、VAE和CLIP的通道信息
             result['type'] = "SD1.x-EMA" if len([k for k in model_data.keys() if 'model_ema' in k]) > 0 else "SD1.x"
-            result['extra_info'].append(f"UNET输入通道数: {input_channels} (3个条件通道 + 1个噪声通道)")
-            result['extra_info'].append("VAE输入通道数: 3 (RGB图像输入)")
-            result['extra_info'].append("CLIP文本输入维度: 768 (最大长度: 77)")
+            result['extra_info'].append(f"UNET input channels: {input_channels} (3 conditioning + 1 noise channels)")
+            result['extra_info'].append("VAE input channels: 3 (RGB image input)")
+            result['extra_info'].append("CLIP text input dim: 768 (max length: 77)")
             return result, debug_info
         
         # 未能确定类型
-        result['type'] = "未知"
-        result['extra_info'].append(f"无法确定架构类型")
+        result['type'] = "Unknown"
+        result['extra_info'].append("Unable to determine architecture type")
         if input_channels:
-            result['extra_info'].append(f"UNET输入通道数: {input_channels}")
+            result['extra_info'].append(f"UNET input channels: {input_channels}")
         
         return result, debug_info
 
@@ -204,12 +204,12 @@ class AnalysisMixin:
     def analyze_unet_structure(self, model_data, unet_keys, total_params):
         """分析UNET结构"""
         result = []
-        result.append("\nUNET结构:")
+        result.append("\nUNET structure:")
         
         key_groups = {
-            '输入块': [k for k in unet_keys if any(p in k for p in ['input_blocks', 'down_blocks'])],
-            '中间块': [k for k in unet_keys if any(p in k for p in ['middle_block', 'mid_block', 'bottleneck'])],
-            '输出块': [k for k in unet_keys if any(p in k for p in ['output_blocks', 'up_blocks'])]
+            'Input blocks': [k for k in unet_keys if any(p in k for p in ['input_blocks', 'down_blocks'])],
+            'Middle block': [k for k in unet_keys if any(p in k for p in ['middle_block', 'mid_block', 'bottleneck'])],
+            'Output blocks': [k for k in unet_keys if any(p in k for p in ['output_blocks', 'up_blocks'])]
         }
         
         def extract_indices(keys, pattern):
@@ -232,11 +232,11 @@ class AnalysisMixin:
             percentage = params / total_params * 100
             total_unet_params += params
             
-            if group_name == '输入块':
+            if group_name == 'Input blocks':
                 indices = extract_indices(keys, 'input_blocks')
                 if not indices:
                     indices = extract_indices(keys, 'down_blocks')
-            elif group_name == '输出块':
+            elif group_name == 'Output blocks':
                 indices = extract_indices(keys, 'output_blocks')
                 if not indices:
                     indices = extract_indices(keys, 'up_blocks')
@@ -245,21 +245,21 @@ class AnalysisMixin:
             
             if indices:
                 max_idx = max(indices)
-                result.append(f"- {group_name}: {max_idx + 1} (索引: 0-{max_idx})")
+                result.append(f"- {group_name}: {max_idx + 1} (indices: 0-{max_idx})")
             else:
-                count = 1 if group_name == '中间块' else 0
+                count = 1 if group_name == 'Middle block' else 0
                 result.append(f"- {group_name}: {count}")
             
-            result.append(f"  参数量: {self.format_params(params)} ({percentage:.1f}%)")
+            result.append(f"  Parameters: {self.format_params(params)} ({percentage:.1f}%)")
         
-        result.append(f"- UNET总参数量: {self.format_params(total_unet_params)} ({total_unet_params/total_params*100:.1f}%)")
+        result.append(f"- UNET total parameters: {self.format_params(total_unet_params)} ({total_unet_params/total_params*100:.1f}%)")
         
         return result
 
     def analyze_vae_structure(self, model_data, vae_keys, total_params):
         """分析VAE结构"""
         result = []
-        result.append("\nVAE结构:")
+        result.append("\nVAE structure:")
         
         encoders = [k for k in vae_keys if 'encoder' in k]
         decoders = [k for k in vae_keys if 'decoder' in k]
@@ -276,20 +276,20 @@ class AnalysisMixin:
         if vae_input and vae_input in model_data:
             shape = model_data[vae_input].shape
             in_channels = shape[1] if len(shape) >= 2 else 0
-            result.append(f"- 输入通道数: {in_channels}")
+            result.append(f"- Input channels: {in_channels}")
         
-        result.append(f"- 编码器键数量: {len(encoders)}")
-        result.append(f"- 编码器参数量: {self.format_params(encoder_params)} ({enc_percent:.1f}%)")
-        result.append(f"- 解码器键数量: {len(decoders)}")
-        result.append(f"- 解码器参数量: {self.format_params(decoder_params)} ({dec_percent:.1f}%)")
-        result.append(f"- VAE总参数量: {self.format_params(total_vae_params)} ({vae_percent:.1f}%)")
+        result.append(f"- Encoder keys: {len(encoders)}")
+        result.append(f"- Encoder parameters: {self.format_params(encoder_params)} ({enc_percent:.1f}%)")
+        result.append(f"- Decoder keys: {len(decoders)}")
+        result.append(f"- Decoder parameters: {self.format_params(decoder_params)} ({dec_percent:.1f}%)")
+        result.append(f"- VAE total parameters: {self.format_params(total_vae_params)} ({vae_percent:.1f}%)")
         
         return result
 
     def analyze_clip_structure(self, model_data, clip_keys, total_params, arch_type):
         """分析CLIP结构"""
         result = []
-        result.append("\nCLIP结构:")
+        result.append("\nCLIP structure:")
         
         # 更加精确地识别text_model_1和text_model_2
         text_model_patterns = {
@@ -322,23 +322,23 @@ class AnalysisMixin:
         if text_model_1_keys:
             model_params = sum(model_data[k].numel() for k in text_model_1_keys if k in model_data)
             model_percent = model_params / total_params * 100
-            result.append(f"- text_model_1键数量: {len(text_model_1_keys)}")
-            result.append(f"- text_model_1参数量: {self.format_params(model_params)} ({model_percent:.1f}%)")
+            result.append(f"- text_model_1 keys: {len(text_model_1_keys)}")
+            result.append(f"- text_model_1 parameters: {self.format_params(model_params)} ({model_percent:.1f}%)")
         
         # 添加text_model_2信息（如果存在）
         if text_model_2_keys:
             model_params = sum(model_data[k].numel() for k in text_model_2_keys if k in model_data)
             model_percent = model_params / total_params * 100
-            result.append(f"- text_model_2键数量: {len(text_model_2_keys)}")
-            result.append(f"- text_model_2参数量: {self.format_params(model_params)} ({model_percent:.1f}%)")
+            result.append(f"- text_model_2 keys: {len(text_model_2_keys)}")
+            result.append(f"- text_model_2 parameters: {self.format_params(model_params)} ({model_percent:.1f}%)")
         # 对于SDXL类型，但没检测到text_model_2键的情况
         elif arch_type == "SDXL" and not text_model_2_keys:
-            result.append(f"- text_model_2: 未检测到 (可能是SDXL变种)")
+            result.append(f"- text_model_2: not detected (possible SDXL variant)")
         
         # 总CLIP参数量
         total_clip_params = sum(model_data[k].numel() for k in clip_keys if k in model_data)
         total_clip_percent = total_clip_params / total_params * 100
-        result.append(f"- CLIP总参数量: {self.format_params(total_clip_params)} ({total_clip_percent:.1f}%)")
+        result.append(f"- CLIP total parameters: {self.format_params(total_clip_params)} ({total_clip_percent:.1f}%)")
         
         return result
 
