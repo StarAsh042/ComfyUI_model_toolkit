@@ -1,12 +1,15 @@
-"""依赖声明约束：插件不得声明 torch（由 ComfyUI 宿主提供）。"""
+"""依赖与发布元数据约束：插件不得声明 torch，版本与 pyproject 保持一致。"""
 import re
 import unittest
 from pathlib import Path
 
 import _env  # noqa: F401  设置 sys.path
+import ComfyUI_model_toolkit as pkg
+import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
 
 REQUIRED = {"safetensors", "pyyaml"}
 
@@ -53,6 +56,27 @@ class RequirementsTest(unittest.TestCase):
                 continue
             with self.subTest(line=line):
                 self.assertRegex(line, r">=|==", "依赖应写明版本下限")
+
+
+class PyprojectTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.config = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+    def test_version_matches_package(self):
+        self.assertEqual(self.config["project"]["version"], pkg.__version__)
+
+    def test_dependencies_follow_requirements(self):
+        self.assertEqual(self.config["project"]["dynamic"], ["dependencies"])
+        self.assertEqual(
+            self.config["tool"]["setuptools"]["dynamic"]["dependencies"]["file"],
+            ["requirements.txt"],
+        )
+
+    def test_registry_metadata_present(self):
+        comfy = self.config["tool"]["comfy"]
+        self.assertTrue(comfy["PublisherId"])
+        self.assertTrue(comfy["DisplayName"])
 
 
 if __name__ == "__main__":

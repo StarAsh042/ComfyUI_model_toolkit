@@ -9,9 +9,7 @@ import unittest
 from pathlib import Path
 
 import _env  # noqa: F401  设置 sys.path
-
 import torch
-
 from ComfyUI_model_toolkit import ModelUtils
 from ComfyUI_model_toolkit.model_toolkit.analysis import AnalysisMixin
 from ComfyUI_model_toolkit.model_toolkit.precision import PrecisionMixin
@@ -86,6 +84,10 @@ class GroupModelKeysTest(unittest.TestCase):
         self.assertEqual(len(groups["VAE"]), 2)
 
 
+@unittest.skipUnless(
+    _env.has_real_model(r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"),
+    "需要本机真实模型",
+)
 class RealCheckpointGroupingTest(unittest.TestCase):
     """用真实 checkpoint 的键名（只读文件头，不加载权重）验证分组数量。"""
 
@@ -190,6 +192,10 @@ class ErrorPathTest(unittest.TestCase):
         self.assertEqual(text, "❌ Failed to load target model")
 
 
+@unittest.skipUnless(
+    _env.has_real_model(r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"),
+    "需要本机真实模型",
+)
 class MetadataTest(unittest.TestCase):
     """B4：safetensors 元信息必须从头部读取（不加载权重）。"""
 

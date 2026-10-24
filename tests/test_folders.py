@@ -4,9 +4,7 @@ import tempfile
 import unittest
 
 import _env  # noqa: F401  设置 sys.path
-
 import folder_paths
-
 from ComfyUI_model_toolkit.model_toolkit.folders import (
     DEFAULT_DIR,
     list_dir_files,
@@ -114,8 +112,9 @@ class ResolveModelPathTest(unittest.TestCase):
                 self.assertIsNone(resolve_model_path("checkpoints", name))
 
 
+@unittest.skipUnless(_env.has_real_model(REAL_MODEL), "需要本机真实模型")
 class RealModelResolutionTest(unittest.TestCase):
-    """用本机真实模型验证解析链路（模型不存在时测试失败，与既有约定一致）。"""
+    """用本机真实模型验证解析链路（模型不存在时跳过）。"""
 
     def test_default_dir_resolves_real_model(self):
         path = resolve_model_path(DEFAULT_DIR, REAL_MODEL)

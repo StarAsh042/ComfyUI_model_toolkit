@@ -57,7 +57,7 @@ class TensorMeta:
 
 class ModelUtils:
     """模型工具类 - 提供模型处理的核心功能"""
-    
+
     # 组件键前缀。顺序即优先级：CLIP 必须排在 VAE 之前，
     # 否则文本编码器的 encoder.* 键会被 VAE 抢走（B1）。
     COMPONENT_PREFIXES = {
@@ -73,23 +73,23 @@ class ModelUtils:
         'model.model.',
         'net.',
     )
-    
+
     ARCH_FEATURES = {
         'SDXL': 'text_model_2',
         'SD2.x': 'v_pred'
     }
-    
+
     @staticmethod
     def format_size(size_in_bytes):
         """格式化文件大小"""
         units = ['B', 'KB', 'MB', 'GB', 'TB']
         size = float(size_in_bytes)
         unit_index = 0
-        
+
         while size >= 1024.0 and unit_index < len(units) - 1:
             size /= 1024.0
             unit_index += 1
-            
+
         return f"{size:.2f} {units[unit_index]}"
 
     @staticmethod
@@ -236,11 +236,11 @@ class ModelUtils:
         """分析模型架构"""
         if not model_data:
             return "Unknown"
-        
+
         for arch_type, feature in cls.ARCH_FEATURES.items():
             if any(feature in k for k in model_data.keys()):
                 return arch_type
-                
+
         return "SD1.x"
 
     @staticmethod
@@ -248,7 +248,7 @@ class ModelUtils:
         """保存模型组件"""
         try:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            
+
             if output_path.endswith('.safetensors'):
                 safetensors.torch.save_file(component_data, output_path)
             else:

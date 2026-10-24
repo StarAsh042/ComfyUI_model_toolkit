@@ -4,15 +4,18 @@ Component Replacer Node - 组件替换器节点
 """
 
 import os
+
 import folder_paths
+
 from .. import ModelUtils
+
 
 class ComponentReplacer:
     """组件替换器节点类"""
-    
+
     def __init__(self):
         pass
-    
+
     @classmethod
     def INPUT_TYPES(s):
         """定义节点输入参数"""
@@ -27,21 +30,21 @@ class ComponentReplacer:
                 })
             }
         }
-    
+
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("Replacement Result",)
     FUNCTION = "replace_component"
     CATEGORY = "model_toolkit/Editing"
-    
+
     def replace_component(self, model_name, component, replacement_name, output_name):
         """替换模型组件
-        
+
         Args:
             model_name (str): 目标模型文件名
             component (str): 要替换的组件类型
             replacement_name (str): 替换组件文件名
             output_name (str): 输出文件名
-            
+
         Returns:
             tuple[str]: 替换结果
         """
@@ -49,10 +52,10 @@ class ComponentReplacer:
             # 加载目标模型
             model_path = folder_paths.get_full_path("checkpoints", model_name)
             model_data = ModelUtils.load_model(model_path)
-            
+
             if not model_data:
                 return ("❌ Failed to load target model",)
-            
+
             # 加载替换组件（只从提取产物目录选，避免把模板 txt 当模型加载）
             replacement_path = folder_paths.get_full_path("model_toolkit_extracted", replacement_name)
             if not replacement_path:
@@ -74,15 +77,15 @@ class ComponentReplacer:
                     f"{stats['shape_mismatch']} shape mismatches, "
                     f"{stats['missing']} keys outside this component",
                 )
-                
+
             # 自动生成输出路径
             if not output_name:
                 output_name = f"{os.path.splitext(model_name)[0]}_replaced"
-            
+
             # 确保有正确的扩展名
             if not output_name.endswith(('.safetensors', '.ckpt', '.pt')):
                 output_name += '.safetensors'
-            
+
             # 保存修改后的模型
             save_path = os.path.join(folder_paths.output_directory, output_name)
             if ModelUtils.save_component(model_data, save_path):
@@ -94,6 +97,6 @@ class ComponentReplacer:
                 return (f"✅ {detail}, saved to: {save_path}",)
             else:
                 return ("❌ Failed to save model",)
-                
+
         except Exception as e:
-            return (f"❌ Replacement failed: {str(e)}",) 
+            return (f"❌ Replacement failed: {str(e)}",)

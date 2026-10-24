@@ -1,0 +1,45 @@
+[project]
+name = "ComfyUI_model_toolkit"
+description = "ComfyUI model inspector with an interactive architecture report."
+version = "2.0.0"
+license = {file = "LICENSE"}
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+# CI 只用于静态检查；测试依赖由 requirements.txt 与宿主 ComfyUI 提供
+dev = ["ruff>=0.6"]
+
+[tool.setuptools]
+# ComfyUI 以「目录即包」加载插件；wheel 只收纳可复用的 Python 包
+packages = ["model_toolkit", "model_toolkit.structure", "nodes"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["components", "web"]
+
+[tool.ruff.lint]
+# E/F：pyflakes + pycodestyle 基础规则；I：import 排序；B：常见陷阱
+select = ["E4", "E7", "E9", "F", "W", "I", "B"]
+ignore = [
+    "E501",  # 行长由 line-length 控制，中文注释不强制折行
+    "E741",  # 允许 l / I 这类单字符名
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # 测试里允许 assert False 之类的写法
+# 根包需先注册目录/路由，再导入节点类（ComfyUI 的加载顺序要求）
+"__init__.py" = ["E402"]
+
+[project.urls]
+Repository = "https://github.com/StarAsh042/ComfyUI_model_toolkit"
+Documentation = "https://github.com/StarAsh042/ComfyUI_model_toolkit#readme"
+
+[tool.comfy]
+PublisherId = "starash042"
+DisplayName = "ComfyUI Model Toolkit"
+Icon = ""

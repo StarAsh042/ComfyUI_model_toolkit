@@ -1,0 +1,92 @@
+name: CI
+
+# PR 与推送到长期分支时跑 Python / 前端测试与静态检查。
+# 聚合 job `ci` 供分支保护引用：以后增删矩阵项都不用改保护配置。
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 无 ComfyUI 的 Runner 使用 tests/ci 的最小 folder_paths 替身；
+  # 真实模型相关测试会自动跳过。
+  COMFYUI_DIR: ${{ github.workspace }}/tests/ci
+
+jobs:
+  test:
+    name: Test (py${{ matrix.python-version }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+        os: [ubuntu-latest]
+        include:
+          # 路径解析与控件迁移有 Windows 特有分支，必须覆盖
+          - os: windows-latest
+            python-version: "3.11"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt aiohttp
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -v
+
+  frontend:
+    name: Frontend (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["24"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Run frontend pure-function tests
+        run: node --test tests/frontend/*.test.mjs
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check .
+
+  ci:
+    name: ci
+    if: always()
+    needs: [test, frontend, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate result
+        run: |
+          echo "test=${{ needs.test.result }} frontend=${{ needs.frontend.result }} lint=${{ needs.lint.result }}"
+          test "${{ needs.test.result }}" = "success"
+          test "${{ needs.frontend.result }}" = "success"
+          test "${{ needs.lint.result }}" = "success"

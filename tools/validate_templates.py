@@ -29,7 +29,6 @@ def main(argv):
         print(__doc__)
         return 2
 
-    specs = templates.get_specs()
     failures = 0
     for model_path in argv:
         path = Path(model_path)

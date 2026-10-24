@@ -1,5 +1,7 @@
 # ComfyUI 模型工具包 (Model Toolkit)
 
+[![CI](https://github.com/StarAsh042/ComfyUI_model_toolkit/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/StarAsh042/ComfyUI_model_toolkit/actions/workflows/ci.yml)
+
 这是一个用于ComfyUI的模型工具包插件，提供了一套完整的模型分析和修改工具。
 ![ComfyUI_model_toolkit](https://github.com/user-attachments/assets/c58d0731-56ef-46e8-a85a-ad1f92ad4b52)
 ## Todo List 📝
@@ -133,6 +135,30 @@ pyyaml>=5.4.0
 ```
 
 2.0.0 起不再依赖 `numpy` / `matplotlib` / `Pillow`：图表与结构图由浏览器渲染。
+
+## 开发与 CI
+
+```bash
+# Python 测试（真实 ComfyUI 环境；真实模型缺失时相关测试自动跳过）
+python -m unittest discover -s tests -v
+
+# 前端纯函数测试（Node 24）
+node --test tests/frontend/*.test.mjs
+
+# 静态检查
+ruff check .
+```
+
+- **CI**（`.github/workflows/ci.yml`）：PR 与推送到 `main` / `dev` 时运行
+  Python 3.11/3.12 + Windows 3.11、Node 24 与 Ruff；聚合 job `ci` 供分支保护引用。
+  Runner 上没有 ComfyUI 与真实模型，测试通过 `tests/ci/folder_paths.py` 最小替身
+  运行纯逻辑；需要真实模型的用例自动跳过（本机运行仍会执行）。
+- **自动发布**（`.github/workflows/publish.yml`）：`pyproject.toml` 变更并推送到
+  `main`（或手动触发）时发布到 Comfy Registry。需在仓库
+  `Settings → Secrets and variables → Actions` 配置 `REGISTRY_ACCESS_TOKEN`。
+- **版本一致性**：发布前同时更新 `pyproject.toml` 与 `__init__.py` 的
+  `__version__`；`tests/test_packaging.py` 与发布工作流都会校验两者一致。
+- 建议分支保护只要求聚合检查 `ci`，以后增删矩阵项无需改保护配置。
 
 ## 参与开发
 
