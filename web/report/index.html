@@ -19,6 +19,13 @@
             <span>Model Toolkit</span>
         </div>
         <div class="top-actions">
+            <button
+                class="button"
+                id="wide-toggle"
+                type="button"
+                aria-pressed="false"
+                title="Expand the report to the full window width"
+            >Wide screen</button>
             <button class="button" id="copy-link" type="button">Copy link</button>
             <details class="export-menu">
                 <summary class="button" aria-label="Export report">Export</summary>
@@ -130,48 +137,7 @@
             </section>
 
             <section id="panel-principles" class="tab-panel" role="tabpanel" data-panel="principles" aria-labelledby="tab-principles" hidden>
-                <div class="callout">
-                    Original, data-linked diagrams are planned for P3. This tab lists the explanations and
-                    paper sources they will use; no picture is copied from papers or third-party tools.
-                </div>
-
-                <div class="principle-grid">
-                    <article class="panel-card principle-card">
-                        <span class="badge muted-badge">Planned · P3</span>
-                        <h2>Latent diffusion overview</h2>
-                        <p>Text is encoded by CLIP, the UNet denoises in VAE latent space, and the VAE decoder produces the image.</p>
-                    </article>
-                    <article class="panel-card principle-card">
-                        <span class="badge muted-badge">Planned · P3</span>
-                        <h2>UNet data flow</h2>
-                        <p>The down path compresses the latent, the middle block mixes it, and the up path reconstructs it with skip connections.</p>
-                    </article>
-                    <article class="panel-card principle-card">
-                        <span class="badge muted-badge">Planned · P3</span>
-                        <h2>ResBlock and timestep conditioning</h2>
-                        <p>A residual block combines GroupNorm, SiLU, convolutions and a timestep embedding injected between the convolutions.</p>
-                    </article>
-                    <article class="panel-card principle-card">
-                        <span class="badge muted-badge">Planned · P3</span>
-                        <h2>Spatial Transformer</h2>
-                        <p>Self-attention, then cross-attention to the text context, then a feed-forward network, wrapped by projections.</p>
-                    </article>
-                    <article class="panel-card principle-card">
-                        <span class="badge muted-badge">Planned · P3</span>
-                        <h2>SDXL differences</h2>
-                        <p>Two text encoders, pooled text embeddings plus size conditioning, and a larger UNet; the optional refiner is a separate checkpoint.</p>
-                    </article>
-                </div>
-
-                <div class="panel-card">
-                    <h2>References</h2>
-                    <ul class="references">
-                        <li><a href="https://arxiv.org/abs/2112.10752" target="_blank" rel="noopener noreferrer">Rombach et al., High-Resolution Image Synthesis with Latent Diffusion Models, CVPR 2022</a></li>
-                        <li><a href="https://arxiv.org/abs/2307.01952" target="_blank" rel="noopener noreferrer">Podell et al., SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis, 2023</a></li>
-                        <li><a href="https://arxiv.org/abs/2212.09748" target="_blank" rel="noopener noreferrer">Peebles &amp; Xie, Scalable Diffusion Models with Transformers, 2023 (planned DiT view)</a></li>
-                        <li><a href="https://arxiv.org/abs/2403.03206" target="_blank" rel="noopener noreferrer">Esser et al., Scaling Rectified Flow Transformers for High-Resolution Image Synthesis, 2024 (planned SD3 view)</a></li>
-                    </ul>
-                </div>
+                <div id="principles-content"></div>
             </section>
 
             <section id="panel-keys" class="tab-panel" role="tabpanel" data-panel="keys" aria-labelledby="tab-keys" hidden>
@@ -179,6 +145,12 @@
                     <div class="panel-head">
                         <h2>Key browser</h2>
                         <span id="keys-status" class="muted"></span>
+                    </div>
+
+                    <div id="keys-prefix-bar" class="keys-prefix-bar" hidden>
+                        <span class="muted">Block filter</span>
+                        <span id="keys-prefix-label" class="mono"></span>
+                        <button id="keys-prefix-clear" class="button" type="button">Clear block filter</button>
                     </div>
 
                     <div class="toolbar">

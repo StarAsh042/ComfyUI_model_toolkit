@@ -8,8 +8,22 @@
   解析）、`model_toolkit/report.py`（报告契约与 LRU 缓存）与
   `model_toolkit/server.py`（ComfyUI 路由注册），以及 `web/report/` 报告页
   （概览 / 架构图 / 键浏览 / 精度 / 元信息 / 原始 JSON / 原理图解）。
+- **UNet 交互式架构视图（P3）**：Architecture 标签页改为自绘 SVG 的 U 形结构图
+  （`web/report/views/unet.js`），展示 down / middle / up 阶段、跳连、文本上下文与
+  时间条件连线、每阶段相对/绝对分辨率、通道数、块序列与 SA/CA 标记；点击阶段或
+  块可打开详情面板（子层、张量形状、dtype、参数量、来源标签），「View in keys」
+  可跳到 Keys 标签页并按块前缀过滤。支持缩放/平移/自适应、导出 SVG、
+  参数/占比/仅结构开关、基础分辨率切换（SD1.5 默认 512、SDXL 默认 1024），
+  窄屏自动折叠阶段并支持横向滚动。
+- **原理图解页（P3）**：Principles 标签页用 5 张自绘 SVG 示意图（潜空间扩散总览、
+  UNet 数据流、ResBlock 与时间条件、空间 Transformer、SDXL 差异）替换占位卡片，
+  图中数值与当前报告联动，缺失模块置灰，附 2–4 句说明与论文引用；未复制任何
+  论文或第三方图片。
 - 报告页使用本地 ECharts，不访问 CDN；数据经 `textContent` 渲染，CSV 导出
   防公式注入，Markdown 导出转义，JSON/CSV/Markdown 均可下载。
+- **报告页宽屏模式**：右上角新增 `Wide screen` / `Standard width` 切换按钮，
+  宽屏下内容区由 1440 px 上限扩展为整个窗口宽度并收紧左右留白，原理图自动
+  变为更多列；偏好写入 `localStorage`，刷新后保持，窄屏（≤720 px）不显示该按钮。
 - 模型检查器新增 `Open Interactive Report` 按钮：先
   `POST /api/model_toolkit/report/prepare` 清缓存并按当前模型文件重建报告，
   再在新标签页打开 `/model_toolkit/report?dir=&model=`；按钮为
@@ -20,11 +34,19 @@
   文件清单，解析后的真实路径须位于 `models/<dir>` 或 `extra_model_paths` 内。
 - 本阶段节点仍保留原有文字与图片输出，计划在 P4 / 2.0.0 移除。
 
+### 修复
+
+- UNet 视图的 `Fit` 现在同时考虑画布宽度与最大高度：宽屏或窗口较高时不再把
+  时间条件栏与输出节点裁到可视区之外，缩放后点 `Fit` 也能完整显示整张图。
+
 ### 工程
 
 - 新增 `tests/test_structure_unet.py`、`tests/test_report.py`、`tests/test_server.py`
-  与 `tests/frontend/report_url.test.mjs`、`report_logic.test.mjs`；
-  Python 单测 144 项、Node 前端测试 34 项全部通过。
+  与 `tests/frontend/report_url.test.mjs`、`report_logic.test.mjs`、
+  `unet_view.test.mjs`、`principles.test.mjs`；
+  Python 单测 144 项、Node 前端测试 48 项全部通过。
+- 键名排序复用单个 `Intl.Collator`（P3），2,763 键的过滤与排序由约 80–100 ms
+  降至 2–7 ms。
 
 ## [1.3.0] - 2026-10-24
 

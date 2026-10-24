@@ -17,8 +17,11 @@ cd D:\AIGC\ComfyUI\custom_nodes\ComfyUI_model_toolkit
 node --test tests/frontend/*.test.mjs
 ```
 
-共 34 项：控件迁移 12 项、报告 URL 7 项、报告页纯函数 15 项（格式化、过滤/排序/分页、
-CSV/Markdown 转义、文件名清洗）。报告页的 DOM 渲染与节点按钮需要在真实 ComfyUI 中验收。
+共 48 项：控件迁移 12 项、报告 URL 7 项、报告页纯函数 15 项（格式化、过滤/排序/分页、
+CSV/Markdown 转义、文件名清洗）、UNet 交互视图 10 项（基础分辨率换算、阶段与块前缀、
+键过滤、上下文维度、U 形布局对齐、跳连/文本上下文/时间条件连线、移动端折叠）、
+原理图数据联动 4 项（事实提取、缺模块置灰、引用与论文链接）。
+报告页的 DOM 渲染与节点按钮需要在真实 ComfyUI 中验收。
 
 `tests/fixtures/workflow_1.2.0_model_inspector.json` 是 1.2.0 保存的工作流，
 使用与黄金样本相同的本机模型，用于在 ComfyUI 中手动验证控件位置迁移：
@@ -49,7 +52,9 @@ CSV/Markdown 转义、文件名清洗）。报告页的 DOM 渲染与节点按�
 
 报告页（`web/report/`）通过 `/model_toolkit/report?dir=&model=` 在新标签页打开；
 页面从 `/api/model_toolkit/report/data` 取 JSON，图表使用本地 ECharts，不访问 CDN。
-点击节点按钮会先 `POST /api/model_toolkit/report/prepare` 重建报告，再导航到报告页，
+Architecture 标签页的 UNet 结构视图（`web/report/views/unet.js`）与 Principles 标签页的
+原理示意图（`web/report/principles/principles.js`）都是自绘 SVG，不依赖任何图表库，
+导出的 SVG 保留原有样式。点击节点按钮会先 `POST /api/model_toolkit/report/prepare` 重建报告，再导航到报告页，
 因此页面始终反映磁盘上的当前模型文件；该请求不执行工作流、也不写文件。
 节点按钮是 `serialize=false` 的 DOM widget，不写入 `widgets_values`，因此不会影响
 1.2.0 / 1.3.0 工作流的控件位置迁移；P2 阶段节点仍保留原有文字与图片输出。
