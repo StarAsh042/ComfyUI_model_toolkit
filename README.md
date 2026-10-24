@@ -3,7 +3,7 @@
 [![CI](https://github.com/StarAsh042/ComfyUI_model_toolkit/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/StarAsh042/ComfyUI_model_toolkit/actions/workflows/ci.yml)
 
 这是一个用于ComfyUI的模型工具包插件，提供了一套完整的模型分析和修改工具。
-![ComfyUI_model_toolkit](https://github.com/user-attachments/assets/c58d0731-56ef-46e8-a85a-ad1f92ad4b52)
+![交互式模型报告页（Architecture）](docs/images/report-overview.png)
 ## Todo List 📝
 
 
