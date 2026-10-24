@@ -8,7 +8,9 @@ import _env  # noqa: F401  设置 sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
 
-REQUIRED = {"numpy", "matplotlib", "pillow", "safetensors"}
+REQUIRED = {"safetensors", "pyyaml"}
+
+REMOVED_IN_2_0 = {"numpy", "matplotlib", "pillow"}
 
 
 def _declared_packages():
@@ -33,6 +35,15 @@ class RequirementsTest(unittest.TestCase):
         self.assertTrue(
             REQUIRED.issubset(declared),
             f"缺少运行期依赖: {sorted(REQUIRED - declared)}",
+        )
+
+    def test_chart_dependencies_removed_in_2_0(self):
+        """2.0.0 图表改由浏览器渲染，不再声明 matplotlib/Pillow/numpy。"""
+        declared = set(_declared_packages())
+        self.assertEqual(
+            declared & REMOVED_IN_2_0,
+            set(),
+            f"2.0.0 不应再声明: {sorted(declared & REMOVED_IN_2_0)}",
         )
 
     def test_every_line_is_pinned_with_lower_bound(self):

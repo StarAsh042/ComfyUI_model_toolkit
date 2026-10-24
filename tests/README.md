@@ -17,15 +17,17 @@ cd D:\AIGC\ComfyUI\custom_nodes\ComfyUI_model_toolkit
 node --test tests/frontend/*.test.mjs
 ```
 
-共 48 项：控件迁移 12 项、报告 URL 7 项、报告页纯函数 15 项（格式化、过滤/排序/分页、
-CSV/Markdown 转义、文件名清洗）、UNet 交互视图 10 项（基础分辨率换算、阶段与块前缀、
-键过滤、上下文维度、U 形布局对齐、跳连/文本上下文/时间条件连线、移动端折叠）、
-原理图数据联动 4 项（事实提取、缺模块置灰、引用与论文链接）。
+共 48 项：控件迁移 12 项（1.2.0/1.3.0 四/三控件 → 2.0.0 两控件）、报告 URL 7 项、
+报告页纯函数 15 项（格式化、过滤/排序/分页、CSV/Markdown 转义、文件名清洗）、
+UNet 交互视图 10 项（基础分辨率换算、阶段与块前缀、键过滤、上下文维度、U 形布局对齐、
+跳连/文本上下文/时间条件连线、移动端折叠）、原理图数据联动 4 项
+（事实提取、缺模块置灰、引用与论文链接）。
 报告页的 DOM 渲染与节点按钮需要在真实 ComfyUI 中验收。
 
 `tests/fixtures/workflow_1.2.0_model_inspector.json` 是 1.2.0 保存的工作流，
 使用与黄金样本相同的本机模型，用于在 ComfyUI 中手动验证控件位置迁移：
-加载后 `model_dir` 应为 `checkpoints`，`show_details` 应为 `Basic`，模型选择不变。
+加载后 `model_dir` 应为 `checkpoints`，`model_name` 不变，`show_details` /
+`show_charts` 两个旧控件已被移除。
 
 ## 黄金样本（G9，需真实模型，约 15 秒）
 
@@ -33,8 +35,9 @@ CSV/Markdown 转义、文件名清洗）、UNet 交互视图 10 项（基础分�
 & "D:\AIGC\ComfyUI\.ext\python.exe" tests\golden_check.py
 ```
 
-覆盖三个场景：`Basic` 报告、`Advanced` 报告 + 图表、替换器错误路径。
-比对文本 SHA256、图像张量 shape/dtype/完整字节 SHA256。
+2.0.0 起覆盖三个场景：完整报告 JSON、`include_keys=False` 的报告、
+替换器错误路径。比对报告 JSON 的规范化 SHA256（`sort_keys` + 紧凑分隔符）与
+摘要字段；节点零输出后不再比对文本/图像哈希。
 
 ## 服务层路由（P2）
 
@@ -56,8 +59,10 @@ Architecture 标签页的 UNet 结构视图（`web/report/views/unet.js`）与 P
 原理示意图（`web/report/principles/principles.js`）都是自绘 SVG，不依赖任何图表库，
 导出的 SVG 保留原有样式。点击节点按钮会先 `POST /api/model_toolkit/report/prepare` 重建报告，再导航到报告页，
 因此页面始终反映磁盘上的当前模型文件；该请求不执行工作流、也不写文件。
-节点按钮是 `serialize=false` 的 DOM widget，不写入 `widgets_values`，因此不会影响
-1.2.0 / 1.3.0 工作流的控件位置迁移；P2 阶段节点仍保留原有文字与图片输出。
+节点按钮是 `serialize=false` 的 DOM widget，不写入 `widgets_values`。
+2.0.0 起 Model Inspector 为零输出节点（`RETURN_TYPES = ()`），
+执行 `prepare_report` 只校验模型并预热缓存；后续新增/删除控件时仍需迁移
+`widgets_values`，避免旧工作流按位置错位。
 
 ## 约定
 
@@ -73,7 +78,14 @@ Architecture 标签页的 UNet 结构视图（`web/report/views/unet.js`）与 P
 - `test_server.py` 锁定服务层：`dir`/`model` 白名单与路径包含性（含 `extra_model_paths`
   注册目录）、`keys=0/1`、prepare 请求体校验与强制重建、`ReportError` 到 HTTP 状态码的映射、
   错误响应不泄露堆栈，以及 `server` 不可用时跳过路由注册。
+- `test_contract.py` 锁定节点契约：Model Inspector 在 2.0.0 为零输出
+  （`RETURN_TYPES = ()`、`OUTPUT_NODE = True`、`FUNCTION = prepare_report`），
+  只有 `model_dir` / `model_name` 两个输入；其余节点契约不变。
+- `test_index.py` 的 `PrepareReportTest` 要求节点执行只预热报告缓存、
+  不得调用 `ModelUtils.load_model`（全量加载）；报告 `summary.model_dir`
+  记录解析时使用的目录。
 - 黄金样本基线于 2026-10-22 因 B1/B3/B4/B2 修复重建过；
-  2026-10-24 因界面/输出英文化、默认目录改为 `checkpoints` 再次重建，
-  文本与图表哈希变化均属预期（原因见 CHANGELOG）。
+  2026-10-24 因界面/输出英文化、默认目录改为 `checkpoints` 再次重建；
+  2026-10-25（2.0.0）随节点零输出切换为报告 JSON 规范化哈希，旧文本/图像
+  哈希退役。
 - `golden_check.py --write` 仅用于重建基线；重建前必须确认行为变化是预期的，并在提交信息里写明原因。

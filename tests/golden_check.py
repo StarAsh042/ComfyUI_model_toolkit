@@ -2,11 +2,13 @@
 
 用法（ComfyUI 自带 Python，torch 2.14.0+cpu）：
     & "D:\\AIGC\\ComfyUI\\.ext\\python.exe" tests\\golden_check.py           # 比对
-    & "D:\\AIGC\\ComfyUI\\.ext\\python.exe" tests\\golden_check.py --write   # 重建基线（重构期间禁止）
+    & "D:\\AIGC\\ComfyUI\\.ext\\python.exe" tests\\golden_check.py --write   # 重建基线
 
-比对内容：文本报告的长度与 SHA256、图像张量的 shape/dtype/完整字节 SHA256、
-固定错误路径的返回文本。环境（ComfyUI/Python/torch）记录在 golden.json 里，
-环境不一致时只告警，不静默通过。
+2.0.0 起节点零输出，基线从「文本/图像哈希」切换为报告 JSON 的规范化哈希：
+- `report`：完整报告（含键名清单）；
+- `report_no_keys`：`include_keys=False` 的页面数据；
+- `replacer_error`：固定错误路径的返回文本。
+环境（ComfyUI/Python/torch）记录在 golden.json 里，环境不一致时只告警。
 """
 import argparse
 import hashlib
@@ -18,6 +20,7 @@ import sys
 import _env  # noqa: F401  设置 sys.path
 
 import ComfyUI_model_toolkit as pkg
+from ComfyUI_model_toolkit.model_toolkit.report import build_report
 
 # Windows 控制台默认 GBK，报告里的 emoji 无法编码；统一按 UTF-8 输出
 if hasattr(sys.stdout, "reconfigure"):
@@ -27,12 +30,21 @@ GOLDEN = pathlib.Path(__file__).with_name("golden.json")
 MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
 
 
-def _text_sha(text: str) -> str:
+def _report_sha(report: dict) -> str:
+    text = json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _tensor_sha(tensor) -> str:
-    return hashlib.sha256(tensor.numpy().tobytes()).hexdigest()
+def _report_summary(report: dict) -> dict:
+    summary = report["summary"]
+    return {
+        "file_name": summary["file_name"],
+        "model_dir": summary["model_dir"],
+        "architecture": summary["architecture"],
+        "key_count": summary["key_count"],
+        "component_count": summary["component_count"],
+        "total_params": summary["total_params"],
+    }
 
 
 def _environment() -> dict:
@@ -50,24 +62,19 @@ def _environment() -> dict:
 
 
 def _measure() -> dict:
-    scenarios = {}
-
-    text, image = pkg.CheckpointInspector().analyze_model(MODEL, "Basic", False)
-    scenarios["basic"] = {
-        "text_len": len(text),
-        "text_sha256": _text_sha(text),
-        "image_shape": list(image.shape),
-        "image_dtype": str(image.dtype),
-        "image_sha256": _tensor_sha(image),
-    }
-
-    text, image = pkg.CheckpointInspector().analyze_model(MODEL, "Advanced", True)
-    scenarios["advanced_chart"] = {
-        "text_len": len(text),
-        "text_sha256": _text_sha(text),
-        "image_shape": list(image.shape),
-        "image_dtype": str(image.dtype),
-        "image_sha256": _tensor_sha(image),
+    full = build_report("checkpoints", MODEL, include_keys=True)
+    compact = build_report("checkpoints", MODEL, include_keys=False)
+    scenarios = {
+        "report": {
+            "summary": _report_summary(full),
+            "has_keys": "keys" in full,
+            "sha256": _report_sha(full),
+        },
+        "report_no_keys": {
+            "summary": _report_summary(compact),
+            "has_keys": "keys" in compact,
+            "sha256": _report_sha(compact),
+        },
     }
 
     (replacer_text,) = pkg.ComponentReplacer().replace_component(

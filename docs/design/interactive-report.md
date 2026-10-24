@@ -1,6 +1,6 @@
 # 交互式报告与架构特化视图 — 实施计划（v2）
 
-> 状态：**已批准（2026-10-24）**；P0 代码完成（含默认目录/英文调整）；P1 数据层完成；P2 服务层、报告页骨架与节点按钮完成（2026-10-24，按钮先重建报告再打开；待界面验收）；P3 完成（2026-10-24：自绘 UNet U 形交互视图 + 5 张原理示意图，Node 48 项 / Python 144 项 / 黄金 3/3 与真实浏览器验证通过；待用户界面验收）
+> 状态：**已批准（2026-10-24）**；P0 代码完成（含默认目录/英文调整）；P1 数据层完成；P2 服务层、报告页骨架与节点按钮完成（2026-10-24，按钮先重建报告再打开；待界面验收）；P3 完成（2026-10-24：自绘 UNet U 形交互视图 + 5 张原理示意图，Node 48 项 / Python 144 项 / 黄金 3/3 与真实浏览器验证通过；待用户界面验收）；P4 完成（2026-10-25：节点零输出、`prepare_report`、删除图表链路与 numpy/matplotlib/Pillow 依赖、旧工作流两控件迁移；Python 138 / Node 48 / 报告 JSON 黄金 3/3；待用户界面验收）
 > 日期：2026-10-24
 > 关联：1.3.0「模型目录」选择（PR #18）；README 待开发项「交互式组件浏览器」「参数差异比较」
 > 本文替代 v1 设计稿。按第 14 节拆 PR 实施。
@@ -525,6 +525,10 @@ ComfyUI 按位置保存 `widgets_values`。1.3.0（PR #18）把 `model_dir` 加�
 夹具为 `tests/fixtures/workflow_1.2.0_model_inspector.json`。Python 88 项、
 黄金样本 3/3、Node 12 项均通过；剩余验收是在真实 ComfyUI 中载入夹具。
 
+> P4 更新（2.0.0）：节点只剩 `model_dir`、`model_name` 两个控件，迁移规则改为
+> “保留前两项、丢弃 `show_details` / `show_charts`”；上文 1.2.0 右移补目录与
+> 1.3.0「（全部）」映射仍然生效，夹具断言已同步为两值格式。
+
 ---
 
 ## 13. 测试与验收
@@ -577,6 +581,13 @@ ComfyUI 按位置保存 `widgets_values`。1.3.0（PR #18）把 `model_dir` 加�
 > 文本与时间条件、相对与绝对分辨率、块详情与「View in keys」前缀过滤、缩放/导出/
 > 开关/基础分辨率、窄屏折叠）与 `web/report/principles/principles.js`（5 张自绘原理
 > 示意图 + 论文引用，数值与当前报告联动）。旧文字/图片输出仍保留，留到 P4。
+
+> P4 交付（2026-10-25）：`CheckpointInspector` 变为零输出节点，
+> `RETURN_TYPES = ()`、`FUNCTION = prepare_report`、`OUTPUT_NODE = True`，
+> 只保留 `model_dir` / `model_name` 两个输入；执行时 `build_report` 校验并
+> 预热缓存。删除 `model_toolkit/charts.py`、`tests/test_charts.py` 与
+> numpy/matplotlib/Pillow 依赖；黄金样本改为报告 JSON 规范化哈希。旧工作流
+> 由 `js/widget_migration.js` 迁移到两控件格式，下游文字/图片连线按 4.4 断开。
 
 每个 PR 的目标分支均为 `dev`，按项目流程 PR + 单测 + 用户界面验收。
 

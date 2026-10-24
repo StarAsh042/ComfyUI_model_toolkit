@@ -11,6 +11,7 @@ import safetensors.torch
 import torch
 
 from ComfyUI_model_toolkit import ModelUtils
+from ComfyUI_model_toolkit.model_toolkit.report import build_report, clear_cache
 from ComfyUI_model_toolkit.nodes.checkpoint_inspector import CheckpointInspector
 
 
@@ -54,8 +55,11 @@ class HeaderIndexTest(unittest.TestCase):
             self.assertIn("first_stage_model.decoder.conv_in.weight", index)
 
 
-class AnalyzeWithoutLoadingWeightsTest(unittest.TestCase):
-    """P4 的核心断言：分析节点不允许再调用 load_model（全量加载）。"""
+class PrepareReportTest(unittest.TestCase):
+    """P4：节点只校验并预热报告缓存，不再输出文字/图片。"""
+
+    def setUp(self):
+        clear_cache()
 
     def _patch(self, tmp, path):
         self._orig_get_full_path = folder_paths.get_full_path
@@ -69,38 +73,36 @@ class AnalyzeWithoutLoadingWeightsTest(unittest.TestCase):
         folder_paths.get_full_path = self._orig_get_full_path
         ModelUtils.load_model = self._orig_load_model
 
-    def test_inspector_reads_header_only(self):
+    def test_prepare_report_warms_cache_without_full_load(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "tiny.safetensors")
             safetensors.torch.save_file(_tiny_state_dict(), path)
             self._patch(tmp, path)
             try:
-                text, image = CheckpointInspector().analyze_model("tiny.safetensors", "Basic", False)
+                result = CheckpointInspector().prepare_report("tiny.safetensors")
+                report = build_report("checkpoints", "tiny.safetensors")
             finally:
                 self._restore()
 
-            self.assertIn("📄 Model file: tiny.safetensors", text)
-            self.assertIn("Architecture", text)
-            self.assertEqual(tuple(image.shape), (1, 1, 3))
+            self.assertEqual(result, {})
+            self.assertEqual(report["summary"]["file_name"], "tiny.safetensors")
+            self.assertEqual(report["summary"]["model_dir"], "checkpoints")
+            self.assertGreater(report["summary"]["total_params"], 0)
 
-    def test_inspector_always_reports_model_dir(self):
-        """没有「全部」：报告始终带一行当前模型目录，默认 checkpoints。"""
+    def test_report_records_selected_model_dir(self):
+        """没有「全部」：报告始终记录解析时使用的目录，默认 checkpoints。"""
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "tiny.safetensors")
             safetensors.torch.save_file(_tiny_state_dict(), path)
             self._patch(tmp, path)
             try:
-                text_default, _ = CheckpointInspector().analyze_model(
-                    "tiny.safetensors", "Basic", False
-                )
-                text_dir, _ = CheckpointInspector().analyze_model(
-                    "tiny.safetensors", "Basic", False, model_dir="loras"
-                )
+                default = build_report("checkpoints", "tiny.safetensors")
+                loras = build_report("loras", "tiny.safetensors")
             finally:
                 self._restore()
 
-            self.assertIn("📁 Model directory: checkpoints", text_default)
-            self.assertIn("📁 Model directory: loras", text_dir)
+            self.assertEqual(default["summary"]["model_dir"], "checkpoints")
+            self.assertEqual(loras["summary"]["model_dir"], "loras")
 
 
 class ModelFingerprintTest(unittest.TestCase):
@@ -139,10 +141,10 @@ class IsChangedTest(unittest.TestCase):
             original = folder_paths.get_full_path
             folder_paths.get_full_path = lambda folder, name: path
             try:
-                first = CheckpointInspector.IS_CHANGED("tiny.safetensors", "Basic", True)
-                second = CheckpointInspector.IS_CHANGED("tiny.safetensors", "Basic", True)
+                first = CheckpointInspector.IS_CHANGED("tiny.safetensors")
+                second = CheckpointInspector.IS_CHANGED("tiny.safetensors")
                 with_dir = CheckpointInspector.IS_CHANGED(
-                    "tiny.safetensors", "Basic", True, model_dir="checkpoints"
+                    "tiny.safetensors", model_dir="checkpoints"
                 )
             finally:
                 folder_paths.get_full_path = original

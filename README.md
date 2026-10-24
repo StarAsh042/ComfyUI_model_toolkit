@@ -7,7 +7,7 @@
 
 ### 已完成 ✅
 - [x] 实现基础模型分析功能，支持SD1.x/SD2.x/SDXL架构检测
-- [x] 提供可视化模型结构图表，包括组件分布和参数统计
+- [x] 提供交互式模型报告页面：UNet 架构、原理解析、键名浏览、精度与元信息，浏览器本地渲染
 - [x] 精确识别和统计EMA参数
 - [x] 实现组件提取和替换功能
 - [x] 添加未归类参数识别与统计（`Other` 参数）
@@ -17,14 +17,11 @@
 - [ ] 优化内存使用，提高大型模型分析效率
 - [ ] 添加LoRA和其他插件模型的支持
 - [ ] 国际化支持：当前界面与输出为英文，后续增加 i18n 中文翻译
-- [ ] 增加图表自定义主题
-- [ ] 支持模型权重分层可视化（按Block层级展示参数分布）
-- [ ] 实现交互式组件浏览器，支持展开/折叠不同层级
 - [ ] 添加模型合并功能，支持多种合并算法
 - [ ] 参数差异比较工具，支持同架构模型细粒度对比
 - [ ] 增加参数剪枝功能，优化模型大小
-- [ ] 增强UNET内部结构分析，支持注意力机制可视化
 - [ ] 添加模型量化工具，支持INT8/FP16转换
+- [ ] DiT / LLM 架构特化视图（Flux、SD3 等）
 
 ## 功能
 
@@ -32,31 +29,35 @@
 
 ### 🔍 Model Inspector
 
-分析模型文件并显示其架构和组件信息，提供可视化报告。
+校验模型并预热报告缓存；分析结果在独立的交互式报告页面中查看。
 
 - 输入：
   - `model_dir`：选择模型所在目录（`ComfyUI/models/` 下第一层子目录，如
     checkpoints / diffusion_models / loras…）。默认 `checkpoints`，没有
     「全部」选项；下方模型列表**严格只显示该目录内**的模型
   - `model_name`：选择要分析的模型文件
-  - `show_details`：`Basic` 或 `Advanced` 显示模式
-  - `show_charts`：是否生成可视化图表
-- 输出：
-  - `Analysis Report`：包含模型架构、组件分布等详细信息
-  - `Visualization Chart`：直观展示模型结构的图形化报表，包括参数分布、UNET结构等
+- 输出：**无**（2.0.0 起节点为零输出节点）
+- 执行语义：解析模型路径、校验文件并预热报告缓存；结果在报告页查看
+- 节点上的 `Open Interactive Report` 按钮会先重建报告，再在新标签页打开页面
+
+报告页包含：
+
+- Overview / Capabilities / Parameter reconciliation
+- Architecture：自绘 SVG 的 UNet U 形结构图，支持阶段与块详情、跳连、
+  文本/时间条件、缩放与导出 SVG、基础分辨率切换、宽屏模式
+- Principles：5 张原创原理示意图与论文引用，数值与当前模型联动
+- Keys：键名搜索、组件/精度/注意力过滤与排序，支持按 UNet 块前缀钻取
+- Precision / Metadata / Raw JSON；CSV、Markdown、JSON 导出
 
 > `.safetensors` 只读取文件头部（键名/形状/精度），**不加载权重**；`.ckpt/.pt` 因格式限制仍需全量加载。
 > 模型文件被同名覆盖或重新下载后，节点会依据文件指纹自动重算，不会返回旧报告。
-> 载入 1.2.0 工作流时会自动迁移控件位置，`model_dir` 补为 `checkpoints`；
-> 旧 1.3.0 工作流里的「（全部）」也会改为 `checkpoints`，中文显示模式转为
-> `Basic` / `Advanced`，无需手动重连。
+> 载入 1.2.0 / 1.3.0 工作流时会自动迁移控件位置（详见下方「升级到 2.0.0」）。
 
 特点：
 - 支持检测各种架构：SD1.x、SD2.x、SDXL及其变种
 - 精确识别EMA参数和其他组件
 - B/M单位的参数展示
-- 美观的深色主题图表
-- 精确的组件分类和分析
+- 交互式报告使用浏览器本地 ECharts 与自绘 SVG，不访问 CDN、不加载额外 Python 图表依赖
 
 ### 📤 Component Extractor
 
@@ -127,12 +128,11 @@ Flux/SD3 模板含 T5XXL、supermerger 模板只有 BLOCKS，超出当前节点�
 
 该插件依赖以下Python库（torch 由 ComfyUI 自带，插件不声明）：
 ```
-numpy>=1.23.0
-matplotlib>=3.5.0
-Pillow>=9.0.0
 safetensors>=0.3.0
 pyyaml>=5.4.0
 ```
+
+2.0.0 起不再依赖 `numpy` / `matplotlib` / `Pillow`：图表与结构图由浏览器渲染。
 
 ## 参与开发
 
@@ -168,9 +168,8 @@ pyyaml>=5.4.0
 1. **分析模型架构**：
    - 添加 "🔍 Model Inspector" 节点
    - 选择模型目录（默认 `checkpoints`），再选择该目录内的模型文件
-   - 选择显示详细程度（`Basic` / `Advanced`）
-   - 启用图表显示选项
-   - 运行后可查看模型的完整信息和可视化图表
+   - 点击节点上的 `Open Interactive Report`，报告会在新标签页打开
+   - 也可以直接运行节点：校验模型并预热缓存，不会产生输出或图片
 
 2. **提取模型组件**：
    - 添加 "📤 Component Extractor" 节点
@@ -187,6 +186,21 @@ pyyaml>=5.4.0
    - 设置输出文件名（可选）
    - 运行后会生成新的模型文件
 
+## 升级到 2.0.0
+
+2.0.0 是破坏性版本，升级前请阅读：
+
+- **节点不再输出文字与图片**：`Analysis Report` / `Visualization Chart` 输出已移除，
+  旧的 `ShowText` / `SaveImage` 等下游节点会断开。需要重新添加
+  Model Inspector 节点（或删除悬空连线），分析结果改在报告页查看。
+- **两个控件被移除**：`show_details`、`show_charts` 删除；页面内已有
+  架构视图、参数/占比/结构开关与 Markdown 导出。
+- **旧工作流自动迁移**：1.2.0 的三值数组会保留 `model_name` 并补
+  `model_dir=checkpoints`；1.3.0 的四值数组保留 `model_dir`、`model_name`；
+  `widgets_values_named` 中的旧键会被删除。1.3.0 的「（全部）」仍映射为
+  `checkpoints`。
+- **依赖精简**：`numpy`、`matplotlib`、`Pillow` 不再声明，图表全部由浏览器渲染。
+
 ## 注意事项
 
 - 支持`.safetensors`和`.ckpt`格式的模型文件
@@ -194,13 +208,13 @@ pyyaml>=5.4.0
 - 建议使用`.safetensors`格式保存输出文件
 - 处理大型模型文件时需要足够的内存
 - 所有操作都是只读的，不会修改原始文件
-- 可视化图表需要matplotlib库支持
+- 报告页需要由 ComfyUI 提供路由与静态资源；节点按钮会先重建报告再打开页面
 
 ## 故障排除
 
-- 如果图表无法正常显示，请确保已安装matplotlib和Pillow库
-- 如果节点无法加载，请检查ComfyUI日志中的错误信息
-- 对于大型SDXL模型，分析可能需要较长时间和更多内存
+- 如果报告按钮不可用，请确认 ComfyUI 已重启且插件路由注册成功（查看启动日志）
+- 如果报告页打不开，请检查 `/model_toolkit/report` 路由是否可访问
+- 对于大型SDXL模型，首次分析可能需要较长时间和更多内存
 
 ## 许可
 
