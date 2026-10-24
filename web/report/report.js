@@ -1,5 +1,4 @@
 import {
-    blockLabel,
     capabilitySummary,
     componentChartData,
     dtypesOf,
@@ -12,7 +11,6 @@ import {
     paginate,
     parseReportParams,
     precisionChartData,
-    ratioLabel,
     reportToMarkdown,
     safeFilename,
     shapeLabel,
@@ -20,8 +18,11 @@ import {
     sourceDescription,
     sourceLabel,
 } from "./report_logic.js";
+import { UnetView, keysUnderPrefixes } from "./views/unet.js";
+import { mountPrinciples } from "./principles/principles.js";
 
 const API_PATH = "/api/model_toolkit/report/data";
+const WIDE_STORAGE_KEY = "model_toolkit.report.wide";
 const TABS = ["overview", "architecture", "principles", "keys", "precision", "metadata", "json"];
 const TEXT = "#cbd5e1";
 const MUTED = "#94a3b8";
@@ -43,6 +44,9 @@ const state = {
     },
     charts: {},
     activeTab: null,
+    unetView: null,
+    prefixFilter: [],
+    prefixLabel: "",
 };
 
 class ReportLoadError extends Error {
@@ -170,6 +174,7 @@ function renderReport() {
     renderCapabilities();
     renderOverview();
     renderArchitecture();
+    renderPrinciples();
     renderKeys();
     renderPrecision();
     renderMetadata();
@@ -413,182 +418,6 @@ function renderStructureSummary(structure) {
     return card;
 }
 
-function flowNode(title, subtitle) {
-    const node = element("div", "flow-node");
-    node.append(
-        element("span", "flow-node-title", title),
-        element("span", "flow-node-sub", subtitle)
-    );
-    return node;
-}
-
-function renderFlow(structure) {
-    const card = element("div", "panel-card");
-    const head = element("div", "panel-head");
-    head.append(
-        element("h2", null, "Stage flow"),
-        element("span", "muted", "Read left to right · the full interactive diagram is planned for P3")
-    );
-    const flow = element("div", "flow");
-    const latent = structure.latent || {};
-    const nodes = [
-        flowNode("Latent in", `${latent.in_channels ?? "?"} channels`),
-        flowNode(
-            "conv_in",
-            structure.io?.conv_in?.out_channels
-                ? `${structure.io.conv_in.out_channels} channels`
-                : "Input convolution"
-        ),
-    ];
-
-    for (const stage of structure.stages || []) {
-        nodes.push(
-            flowNode(
-                `Down L${stage.level}`,
-                `${ratioLabel(stage.resolution_ratio)} · ${stage.channels ?? "?"} ch`
-            )
-        );
-    }
-    if (structure.middle) {
-        nodes.push(
-            flowNode("Middle", `${structure.middle.channels ?? "?"} ch`)
-        );
-    }
-    for (const stage of structure.up || []) {
-        nodes.push(
-            flowNode(
-                `Up L${stage.level}`,
-                `${ratioLabel(stage.resolution_ratio)} · ${stage.channels ?? "?"} ch`
-            )
-        );
-    }
-    nodes.push(
-        flowNode(
-            "conv_out",
-            structure.io?.conv_out?.out_channels != null
-                ? `${structure.io.conv_out.out_channels} channels`
-                : "Output convolution"
-        ),
-        flowNode("Latent out", "predicted noise")
-    );
-
-    nodes.forEach((node, index) => {
-        if (index) flow.append(element("span", "flow-arrow", "→"));
-        flow.append(node);
-    });
-
-    card.append(head, flow);
-    return card;
-}
-
-function attentionBadges(attention) {
-    const badges = [];
-    if (!attention) return badges;
-    if (attention.self) {
-        const badge = element("span", "attn-badge", "SA");
-        badge.title = "Self-attention";
-        badges.push(badge);
-    }
-    if (attention.cross) {
-        const badge = element("span", "attn-badge cross", "CA");
-        badge.title = attention.context_dim
-            ? `Cross-attention · context ${attention.context_dim}`
-            : "Cross-attention";
-        badges.push(badge);
-    }
-    return badges;
-}
-
-function stageShare(structure, stage) {
-    const total = Number(structure.totals?.params) || 0;
-    if (!total) return "—";
-    return formatPercent((Number(stage.params) || 0) / total * 100);
-}
-
-function stageCard(structure, stage) {
-    const card = element("article", "stage-card");
-    const header = document.createElement("header");
-    const heading = element("div");
-    const direction =
-        stage.direction === "down" ? "Down" : stage.direction === "up" ? "Up" : "Middle";
-    heading.append(
-        element("h3", "stage-title", `${direction} · ${stage.id}`),
-        element("span", "stage-sub", `${ratioLabel(stage.resolution_ratio)} resolution`)
-    );
-    header.append(heading);
-    if (stage.channels != null) {
-        header.append(element("span", "badge muted-badge", `${stage.channels} ch`));
-    }
-    card.append(header);
-
-    const metrics = element("div", "stage-metrics");
-    const values = [
-        ["Params", formatParams(stage.params), `${formatCount(stage.params)} parameters`],
-        ["Share", stageShare(structure, stage), "Share of UNet parameters"],
-        ["Keys", formatCount(stage.key_count), "Keys in this stage"],
-        ["Blocks", formatCount(stage.blocks?.length), "Blocks in this stage"],
-    ];
-    for (const [label, value, title] of values) {
-        const metric = element("div", "stage-metric");
-        const valueNode = element("span", "stage-metric-value", value);
-        valueNode.title = title;
-        metric.append(element("span", "stage-metric-label", label), valueNode);
-        metrics.append(metric);
-    }
-    card.append(metrics);
-
-    const blocks = element("div", "block-list");
-    for (const block of stage.blocks || []) {
-        const chip = element("span", `block-chip ${block.kind || "unknown"}`);
-        chip.append(element("span", null, blockLabel(block.kind)));
-        for (const badge of attentionBadges(block.attention)) chip.append(badge);
-        chip.title = `${block.id} · ${formatCount(block.params)} parameters · ${formatCount(
-            block.key_count
-        )} keys`;
-        blocks.append(chip);
-    }
-    if (!(stage.blocks || []).length) {
-        blocks.append(element("span", "muted", "No blocks detected"));
-    }
-    card.append(blocks);
-
-    if (stage.transition) {
-        const transition = element("div", "transition");
-        const factor =
-            stage.transition.kind === "downsample"
-                ? `Downsample ×${stage.transition.stride || 2}`
-                : `Upsample ×${stage.transition.factor || 2}`;
-        transition.append(element("span", null, factor));
-        const source = stage.transition.stride_source || stage.transition.factor_source;
-        if (source) {
-            const badge = element("span", "source", sourceLabel(source));
-            badge.title = sourceDescription(source);
-            transition.append(badge);
-        }
-        card.append(transition);
-    }
-
-    if (stage.skip_from) {
-        card.append(element("div", "skip", `Skip connection from ${stage.skip_from}`));
-    }
-
-    return card;
-}
-
-function stageSection(title, stages, structure) {
-    const section = element("section", "stage-section panel-card");
-    const head = element("div", "panel-head");
-    head.append(
-        element("h2", null, title),
-        element("span", "muted", `${stages.length} stage${stages.length === 1 ? "" : "s"}`)
-    );
-    const grid = element("div", "stage-grid");
-    for (const stage of stages) grid.append(stageCard(structure, stage));
-    if (!stages.length) grid.append(element("p", "muted", "No stages detected."));
-    section.append(head, grid);
-    return section;
-}
-
 function ioDetail(entry) {
     if (entry?.in_channels != null && entry?.out_channels != null) {
         return `${entry.in_channels} → ${entry.out_channels}`;
@@ -750,6 +579,7 @@ function renderGenericComponents() {
 function renderArchitecture() {
     const container = $("architecture-content");
     clear(container);
+    state.unetView = null;
     const structure = state.report.structure || {};
 
     if (structure.kind !== "unet") {
@@ -772,20 +602,22 @@ function renderArchitecture() {
         return;
     }
 
-    container.append(
-        element(
-            "div",
-            "callout",
-            "This is the P2 structure view. The interactive U-shaped diagram, block drill-down and “View in keys” linking are planned for P3; the numbers below already come from the real weights."
-        )
-    );
     container.append(renderStructureSummary(structure));
-    container.append(renderFlow(structure));
-    container.append(stageSection("Down path", structure.stages || [], structure));
-    container.append(stageSection("Middle", structure.middle ? [structure.middle] : [], structure));
-    container.append(stageSection("Up path", structure.up || [], structure));
+    const viewHost = element("div", "panel-card unet-host");
+    container.append(viewHost);
+    state.unetView = new UnetView(viewHost, {
+        structure,
+        keys: state.keys,
+        fileName: state.report.summary.file_name,
+        onViewKeys: viewKeysInTab,
+        onToast: showToast,
+    });
     container.append(renderIoTable(structure));
     container.append(renderReconciliation(structure));
+}
+
+function renderPrinciples() {
+    mountPrinciples($("principles-content"), state.report);
 }
 
 function appendHighlighted(parent, text, query) {
@@ -809,6 +641,36 @@ function appendHighlighted(parent, text, query) {
         index = haystack.indexOf(lowerNeedle, start);
     }
     if (start < text.length) parent.append(document.createTextNode(text.slice(start)));
+}
+
+function renderPrefixBar() {
+    const bar = $("keys-prefix-bar");
+    if (!bar) return;
+    const active = state.prefixFilter.length > 0;
+    bar.hidden = !active;
+    if (active) {
+        $("keys-prefix-label").textContent = state.prefixLabel;
+    }
+}
+
+function viewKeysInTab(prefixes, label) {
+    state.prefixFilter = Array.isArray(prefixes) ? prefixes.filter(Boolean) : [];
+    state.prefixLabel = label || "";
+    $("keys-search").value = "";
+    $("keys-component").value = "all";
+    $("keys-dtype").value = "all";
+    $("keys-attention").checked = false;
+    $("keys-sort").value = "name";
+    renderPrefixBar();
+    activateTab("keys");
+    applyKeyFilters();
+}
+
+function clearPrefixFilter() {
+    state.prefixFilter = [];
+    state.prefixLabel = "";
+    renderPrefixBar();
+    applyKeyFilters();
 }
 
 function renderKeys() {
@@ -835,6 +697,9 @@ function renderKeys() {
         attentionOnly: false,
         sort: "name",
     };
+    state.prefixFilter = [];
+    state.prefixLabel = "";
+    renderPrefixBar();
 
     if (!state.keys.length) {
         $("keys-status").textContent = "No key list";
@@ -863,7 +728,9 @@ function applyKeyFilters() {
         sort: $("keys-sort").value,
     };
     state.page = 0;
-    state.filteredKeys = sortKeys(filterKeys(state.keys, state.filters), state.filters.sort);
+    let keys = filterKeys(state.keys, state.filters);
+    if (state.prefixFilter.length) keys = keysUnderPrefixes(keys, state.prefixFilter);
+    state.filteredKeys = sortKeys(keys, state.filters.sort);
     renderKeyTable();
 }
 
@@ -1032,6 +899,7 @@ function activateTab(name, updateHash = true) {
     if (target === "precision") ensurePrecisionChart();
     requestAnimationFrame(() => {
         for (const chart of Object.values(state.charts)) chart?.resize();
+        if (target === "architecture") state.unetView?.resize();
     });
 }
 
@@ -1275,6 +1143,35 @@ function exportMarkdown() {
     showToast("Markdown exported");
 }
 
+function readWidePreference() {
+    try {
+        return window.localStorage.getItem(WIDE_STORAGE_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+
+function setWideMode(enabled, { persist = true } = {}) {
+    document.body.classList.toggle("wide-mode", enabled);
+    const button = $("wide-toggle");
+    button.setAttribute("aria-pressed", String(enabled));
+    button.textContent = enabled ? "Standard width" : "Wide screen";
+    button.title = enabled
+        ? "Return to the standard 1440 px content width"
+        : "Expand the report to the full window width";
+    if (persist) {
+        try {
+            window.localStorage.setItem(WIDE_STORAGE_KEY, enabled ? "1" : "0");
+        } catch {
+            // Storage may be unavailable; the toggle still works for this page.
+        }
+    }
+    window.requestAnimationFrame(() => {
+        for (const chart of Object.values(state.charts)) chart?.resize();
+        state.unetView?.resize();
+    });
+}
+
 function bindKeyControls() {
     let searchTimer = null;
     $("keys-search").addEventListener("input", () => {
@@ -1291,9 +1188,15 @@ function bindKeyControls() {
     });
     $("keys-prev").addEventListener("click", () => changePage(-1));
     $("keys-next").addEventListener("click", () => changePage(1));
+    $("keys-prefix-clear").addEventListener("click", clearPrefixFilter);
 }
 
 function init() {
+    setWideMode(readWidePreference(), { persist: false });
+    $("wide-toggle").addEventListener("click", () => {
+        setWideMode(!document.body.classList.contains("wide-mode"));
+    });
+
     document.querySelectorAll("[data-tab]").forEach((button) => {
         button.addEventListener("click", () => activateTab(button.dataset.tab));
     });
@@ -1336,6 +1239,7 @@ function init() {
     bindKeyControls();
     window.addEventListener("resize", () => {
         for (const chart of Object.values(state.charts)) chart?.resize();
+        state.unetView?.resize();
     });
 
     loadReport();

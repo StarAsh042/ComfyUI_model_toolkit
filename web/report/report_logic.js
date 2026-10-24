@@ -20,6 +20,8 @@ const ATTENTION_MARKERS = [
     "attention",
 ];
 
+const NAME_COLLATOR = new Intl.Collator("en", { numeric: true });
+
 const BLOCK_LABELS = {
     resblock: "ResBlock",
     transformer: "Transformer",
@@ -152,8 +154,7 @@ export function filterKeys(keys, filters = {}) {
 
 export function sortKeys(keys, mode = "name") {
     const items = [...(keys || [])];
-    const byName = (a, b) =>
-        String(a.name).localeCompare(String(b.name), "en", { numeric: true });
+    const byName = (a, b) => NAME_COLLATOR.compare(String(a.name), String(b.name));
     const byParams = (a, b) => (Number(a.params) || 0) - (Number(b.params) || 0);
 
     switch (mode) {
