@@ -43,43 +43,11 @@ if hasattr(folder_paths, 'add_model_folder_path'):
 # 前端扩展目录（ComfyUI 约定）：模型检查器的「模型目录」联动下拉
 WEB_DIRECTORY = "./js"
 
+# 服务层集中注册：模型目录文件清单 + 报告数据接口。
+# 只在真实 ComfyUI 环境生效；测试或旧版环境下 register_routes 内部跳过。
+from .model_toolkit.server import register_routes
 
-def _register_folder_files_route():
-    """注册 GET /model_toolkit/folder_files：返回各模型目录的文件清单。
-
-    模型检查器的「模型目录」下拉需要按目录切换模型列表，而 INPUT_TYPES
-    只在启动时求值一次，服务端做不了控件间联动——文件清单经该路由提供给
-    前端 js/model_dir_filter.js。
-
-    只在 ComfyUI 已加载 server 模块（即真实运行环境）时注册：main.py 先
-    创建 PromptServer 再导入自定义节点，顺序有保证；测试或旧版 ComfyUI 下
-    静默跳过，避免拖入整个 ComfyUI 依赖导致导入失败。
-    """
-    if "server" not in sys.modules:
-        return
-    from server import PromptServer
-    from aiohttp import web
-
-    if getattr(PromptServer, "instance", None) is None:
-        return
-
-    from .model_toolkit.folders import list_dir_files, list_model_dirs
-
-    try:
-
-        @PromptServer.instance.routes.get("/model_toolkit/folder_files")
-        async def _folder_files(_request):
-            folders = {
-                dir_name: list_dir_files(dir_name)
-                for dir_name in list_model_dirs()
-            }
-            return web.json_response(folders)
-
-    except Exception as e:
-        logger.warning(f"Failed to register the model directory file-list route (directory filtering will be unavailable): {e}")
-
-
-_register_folder_files_route()
+register_routes()
 
 # 导入节点类
 from .nodes.checkpoint_inspector import CheckpointInspector

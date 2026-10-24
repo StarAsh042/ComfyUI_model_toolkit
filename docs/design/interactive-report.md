@@ -1,6 +1,6 @@
 # 交互式报告与架构特化视图 — 实施计划（v2）
 
-> 状态：**已批准（2026-10-24）**；P0 代码完成（含默认目录/英文调整），待界面验收；P1 起未开始
+> 状态：**已批准（2026-10-24）**；P0 代码完成（含默认目录/英文调整）；P1 数据层完成；P2 服务层、报告页骨架与节点按钮完成（2026-10-24，按钮先重建报告再打开；待界面验收）；P3 未开始
 > 日期：2026-10-24
 > 关联：1.3.0「模型目录」选择（PR #18）；README 待开发项「交互式组件浏览器」「参数差异比较」
 > 本文替代 v1 设计稿。按第 14 节拆 PR 实施。
@@ -109,8 +109,15 @@ class CheckpointInspector:
 
 ```js
 // js/report_button.js（会被 ComfyUI 自动加载）
-window.open(`/model_toolkit/report?dir=${encodeURIComponent(dir)}&model=${encodeURIComponent(model)}`, "_blank")
+const tab = window.open("about:blank", "_blank")                          // 1. 同步打开，避免弹窗拦截
+await fetch(REPORT_PREPARE_PATH, { method: "POST", body: payload })       // 2. 重建报告并预热缓存
+tab.location.href = buildReportUrl(origin, dir, model)                    // 3. 导航到报告页
 ```
+
+> P2 实现调整（2026-10-24 用户要求）：按钮必须先重建报告再打开页面，
+> 保证页面不会读到旧分析结果。刷新走独立的 POST prepare 路由，不把整张
+> 工作流加入队列，避免误触发生图；P4 后该路由与节点 `prepare_report`
+> 合并为同一执行语义。
 
 ### 4.3 为什么分阶段移除输出
 
@@ -148,9 +155,10 @@ window.open(`/model_toolkit/report?dir=${encodeURIComponent(dir)}&model=${encode
    │                              └─ 缓存（LRU）
    ▼
 [服务层] model_toolkit/server.py
-   │  GET /model_toolkit/report          页面
-   │  GET /model_toolkit/report/data     报告 JSON
-   │  GET /model_toolkit/report/assets/* 页面静态资源
+   │  GET  /model_toolkit/report          页面
+   │  GET  /model_toolkit/report/data     报告 JSON
+   │  POST /model_toolkit/report/prepare  重建报告并预热缓存（按钮调用）
+   │  GET  /model_toolkit/report/assets/* 页面静态资源
    ▼
 [前端] web/report/  ── ECharts（图表）+ 自绘 SVG（架构/原理）+ 原生 JS
    ▲
@@ -313,6 +321,7 @@ structure/
 |---|---|---|
 | GET | `/model_toolkit/report` | 返回 `web/report/index.html`，参数 `dir`、`model` |
 | GET | `/model_toolkit/report/data?dir=&model=&keys=1` | 返回报告 JSON；`keys=0` 时不含键名清单 |
+| POST | `/model_toolkit/report/prepare` | 清缓存并重建报告（JSON `{dir, model}`）；按钮打开页面前调用 |
 | GET | `/model_toolkit/report/assets/*` | `routes.static()` 托管 `web/report/` |
 
 实现要点：
@@ -321,7 +330,7 @@ structure/
 - 仅在 `server` 已加载且 `PromptServer.instance` 存在时注册（沿用 1.3.0）；
 - `await asyncio.to_thread(build_report, ...)`，避免 `.ckpt` 阻塞事件循环；
 - 参数校验：`dir` 必须在 `list_model_dirs()`，`model` 必须在 `list_dir_files(dir)`；解析后 `realpath` 必须位于 `models_dir` 内；
-- 只读 GET，不新增写接口；
+- GET 只读；POST prepare 只清缓存并重建报告，不写任何文件、不排队执行工作流；
 - 错误 JSON：`{ "error": "...", "code": "..." }`，不返回堆栈。
 
 ---
@@ -474,7 +483,7 @@ latent ─ conv_in ─ [L0: Res, SA/CA] ─┐                  ┌─ [L2: Res,
 | XSS | 所有来自模型的数据用 `textContent`；SVG 文本同样转义；CSP `default-src 'self'`；不引入 CDN |
 | CSV 注入 | 以 `= + - @` 开头的单元格加 `'` 前缀 |
 | 信息泄露 | 不返回服务器绝对路径，只返回相对 `models/<dir>` 的路径 |
-| 资源滥用 | 只读 GET；LRU 上限；不提供批量接口 |
+| 资源滥用 | GET 只读；POST prepare 仅重建单个报告；LRU 上限；不提供批量接口 |
 | 同源风险 | ComfyUI 默认无鉴权：报告页不提供任何写操作；原理图文案为静态可信内容，模型数据一律当不可信输入 |
 
 ---
