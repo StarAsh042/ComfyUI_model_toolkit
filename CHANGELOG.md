@@ -1,5 +1,21 @@
 # 更新日志
 
+## [Unreleased]
+
+### 工程
+
+- 新增 GitHub Actions CI（`.github/workflows/ci.yml`）：Python 3.11/3.12 +
+  Windows 3.11 单测、Node 24 前端测试与 Ruff 检查，聚合 job `ci` 供分支保护引用。
+- 新增 Comfy Registry 发布工作流（`.github/workflows/publish.yml`）：
+  `pyproject.toml` 变更推送到 `main` 或手动触发时发布；需配置
+  `REGISTRY_ACCESS_TOKEN`。发布前校验 `pyproject.toml` 与 `__version__` 一致。
+- 新增 `pyproject.toml`：项目元数据、动态依赖（`requirements.txt`）、Ruff 配置
+  与 `[tool.comfy]` 发布信息（版本 2.0.0）。
+- 新增 `tests/ci/folder_paths.py` 替身：无 ComfyUI/真实模型的 CI Runner 可运行
+  纯逻辑测试；真实模型用例在模型缺失时自动跳过（本机仍执行）。
+- Ruff 清理：空白字符、import 排序与少量未使用变量/导入，无行为变化。
+- Python 单测增至 141 项（新增 pyproject 发布元数据校验）。
+
 ## [2.0.0] - 2026-10-25
 
 ### 破坏性变更

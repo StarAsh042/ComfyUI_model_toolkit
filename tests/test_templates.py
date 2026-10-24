@@ -2,9 +2,7 @@
 import unittest
 
 import _env  # noqa: F401  设置 sys.path
-
 import torch
-
 from ComfyUI_model_toolkit import ModelUtils
 from ComfyUI_model_toolkit.model_toolkit import templates
 

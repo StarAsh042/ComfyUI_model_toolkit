@@ -9,10 +9,8 @@
 import unittest
 
 import _env  # noqa: F401  设置 sys.path
-
 import folder_paths
 import torch
-
 from ComfyUI_model_toolkit.model_toolkit.core import ModelUtils, TensorMeta
 from ComfyUI_model_toolkit.model_toolkit.structure import extract
 
@@ -336,8 +334,12 @@ class GenericFallbackTest(unittest.TestCase):
         self.assertIn("not available", result["note"])
 
 
+@unittest.skipUnless(
+    _env.has_real_model(SD1_MODEL) and _env.has_real_model(SDXL_MODEL),
+    "需要本机 SD1/SDXL 真实模型",
+)
 class RealCheckpointStructureTest(InvariantMixin, unittest.TestCase):
-    """真实模型只读头部；模型缺失时测试失败（与既有约定一致）。"""
+    """真实模型只读头部；模型缺失时跳过（CI 无模型）。"""
 
     @classmethod
     def _extract(cls, name, arch_name):
