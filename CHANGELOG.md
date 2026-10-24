@@ -1,5 +1,31 @@
 # 更新日志
 
+## [Unreleased]
+
+### 新增
+
+- **交互式模型架构报告（P1/P2）**：新增 `model_toolkit/structure/`（UNet 块结构
+  解析）、`model_toolkit/report.py`（报告契约与 LRU 缓存）与
+  `model_toolkit/server.py`（ComfyUI 路由注册），以及 `web/report/` 报告页
+  （概览 / 架构图 / 键浏览 / 精度 / 元信息 / 原始 JSON / 原理图解）。
+- 报告页使用本地 ECharts，不访问 CDN；数据经 `textContent` 渲染，CSV 导出
+  防公式注入，Markdown 导出转义，JSON/CSV/Markdown 均可下载。
+- 模型检查器新增 `Open Interactive Report` 按钮：先
+  `POST /api/model_toolkit/report/prepare` 清缓存并按当前模型文件重建报告，
+  再在新标签页打开 `/model_toolkit/report?dir=&model=`；按钮为
+  `serialize=false` 的 DOM widget，不写入 `widgets_values`。
+- 新增路由：`GET /model_toolkit/folder_files`、`GET /model_toolkit/report/data`、
+  `GET /model_toolkit/report`、静态 `GET /model_toolkit/report/assets/*`、
+  `POST /model_toolkit/report/prepare`；`dir`/`model` 必须同时通过目录白名单与
+  文件清单，解析后的真实路径须位于 `models/<dir>` 或 `extra_model_paths` 内。
+- 本阶段节点仍保留原有文字与图片输出，计划在 P4 / 2.0.0 移除。
+
+### 工程
+
+- 新增 `tests/test_structure_unet.py`、`tests/test_report.py`、`tests/test_server.py`
+  与 `tests/frontend/report_url.test.mjs`、`report_logic.test.mjs`；
+  Python 单测 144 项、Node 前端测试 34 项全部通过。
+
 ## [1.3.0] - 2026-10-24
 
 ### 破坏性变更
