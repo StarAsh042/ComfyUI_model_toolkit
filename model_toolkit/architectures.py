@@ -28,7 +28,7 @@ class Architecture:
 
 SD = Architecture(
     id="sd",
-    display="SD 系列",
+    display="SD family",
     family="sd",
     capability="complete",
     note="",
@@ -37,18 +37,18 @@ SD = Architecture(
 
 FLUX = Architecture(
     id="flux",
-    display="Flux 系列",
+    display="Flux family",
     family="mmdit",
     capability="partial",
-    note="主干为 MMDiT，文本编码器含 T5，本插件的 CLIP 统计只覆盖 CLIP-L/G",
+    note="MMDiT backbone; the text encoder includes T5, so CLIP statistics only cover CLIP-L/G",
 )
 
 SD3 = Architecture(
     id="sd3",
-    display="SD3 系列",
+    display="SD3 family",
     family="mmdit",
     capability="partial",
-    note="含 T5-XXL 文本编码器，本插件的 CLIP 统计不完整",
+    note="Includes a T5-XXL text encoder, so CLIP statistics are incomplete",
 )
 
 AURAFLOW = Architecture(
@@ -56,15 +56,15 @@ AURAFLOW = Architecture(
     display="AuraFlow",
     family="mmdit",
     capability="partial",
-    note="MMDiT 主干，文本编码器含 T5，CLIP 统计不完整",
+    note="MMDiT backbone; the text encoder includes T5, so CLIP statistics are incomplete",
 )
 
 PIXART = Architecture(
     id="pixart",
-    display="PixArt 系列",
+    display="PixArt family",
     family="mmdit",
     capability="partial",
-    note="文本编码器为 T5，本插件的 CLIP 统计不适用",
+    note="Uses a T5 text encoder, so CLIP statistics do not apply",
 )
 
 HUNYUANDIT = Architecture(
@@ -72,7 +72,7 @@ HUNYUANDIT = Architecture(
     display="HunyuanDiT",
     family="mmdit",
     capability="partial",
-    note="双文本编码器（含 T5），CLIP 统计不完整",
+    note="Dual text encoders (including T5), so CLIP statistics are incomplete",
 )
 
 CASCADE = Architecture(
@@ -80,7 +80,7 @@ CASCADE = Architecture(
     display="Stable Cascade",
     family="cascade",
     capability="partial",
-    note="多阶段级联模型，单个 UNET 的参数量不等于整模规模",
+    note="Multi-stage cascade model; a single UNET does not represent the full model size",
 )
 
 LTXV = Architecture(
@@ -88,7 +88,7 @@ LTXV = Architecture(
     display="LTXV",
     family="video",
     capability="unsupported",
-    note="视频扩散模型，3D VAE 与时序层，本插件的图像类统计不适用",
+    note="Video diffusion model with a 3D VAE and temporal layers, so image statistics do not apply",
 )
 
 SVD = Architecture(
@@ -96,7 +96,7 @@ SVD = Architecture(
     display="Stable Video Diffusion",
     family="video",
     capability="unsupported",
-    note="视频扩散模型，含时序层，本插件的静态图像统计不适用",
+    note="Video diffusion model with temporal layers, so static image statistics do not apply",
 )
 
 MINIMAX_H3 = Architecture(
@@ -104,7 +104,7 @@ MINIMAX_H3 = Architecture(
     display="MiniMax H3",
     family="video",
     capability="unsupported",
-    note="音视频联合模型，本插件的三组件统计不适用",
+    note="Joint audio-video model, so three-component statistics do not apply",
 )
 
 # 元数据（modelspec.architecture）→ 架构；只有少数导出工具会写这个字段
@@ -166,4 +166,4 @@ def report_hint(arch):
     if arch is None or arch.capability == "complete":
         return None
     level = "⚠️" if arch.capability == "partial" else "⛔"
-    return f"{level} 架构提示: {arch.display} — {arch.note}"
+    return f"{level} Architecture note: {arch.display} — {arch.note}"

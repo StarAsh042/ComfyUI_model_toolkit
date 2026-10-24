@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Model Report · Model Toolkit</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/model_toolkit/report/assets/report.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true">MT</span>
+            <span>Model Toolkit</span>
+        </div>
+        <div class="top-actions">
+            <button
+                class="button"
+                id="wide-toggle"
+                type="button"
+                aria-pressed="false"
+                title="Expand the report to the full window width"
+            >Wide screen</button>
+            <button class="button" id="copy-link" type="button">Copy link</button>
+            <details class="export-menu">
+                <summary class="button" aria-label="Export report">Export</summary>
+                <div class="export-list">
+                    <button type="button" id="export-json" disabled>Export JSON</button>
+                    <button type="button" id="export-csv" disabled>Export keys CSV</button>
+                    <button type="button" id="export-markdown" disabled>Export Markdown</button>
+                </div>
+            </details>
+        </div>
+    </header>
+
+    <main>
+        <section id="loading-state" class="state" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <p>Loading model report…</p>
+            <p class="muted">The first analysis of a large checkpoint can take a moment.</p>
+        </section>
+
+        <section id="error-state" class="state" hidden>
+            <div class="panel-card error-card">
+                <p class="eyebrow">Model report</p>
+                <h1>Report unavailable</h1>
+                <p id="error-message" class="error-message"></p>
+                <p id="error-code" class="mono muted"></p>
+                <div class="state-actions">
+                    <button id="retry-button" class="button primary" type="button">Retry</button>
+                    <a class="button" href="/">Back to ComfyUI</a>
+                </div>
+                <p class="muted">
+                    Open this page with the “Open Interactive Report” button on a Model Inspector node.
+                </p>
+            </div>
+        </section>
+
+        <div id="report-view" hidden>
+            <section class="report-head">
+                <div>
+                    <p class="eyebrow">Model report</p>
+                    <div class="title-row">
+                        <h1 id="model-title"></h1>
+                        <span id="architecture-badge" class="badge"></span>
+                    </div>
+                    <p id="model-subtitle" class="subtitle"></p>
+                </div>
+                <div id="summary-meta" class="meta-line" aria-label="Report metadata"></div>
+            </section>
+
+            <section id="summary-cards" class="cards" aria-label="Summary"></section>
+
+            <section id="capabilities-block" class="panel-card" hidden>
+                <div class="panel-head">
+                    <h2>Capabilities</h2>
+                    <span class="muted">Detected from weights · missing values are not guessed</span>
+                </div>
+                <div id="capabilities" class="chips"></div>
+            </section>
+
+            <nav class="tabs" role="tablist" aria-label="Report sections">
+                <button id="tab-overview" type="button" role="tab" data-tab="overview" aria-controls="panel-overview">Overview</button>
+                <button id="tab-architecture" type="button" role="tab" data-tab="architecture" aria-controls="panel-architecture">Architecture</button>
+                <button id="tab-principles" type="button" role="tab" data-tab="principles" aria-controls="panel-principles">Principles</button>
+                <button id="tab-keys" type="button" role="tab" data-tab="keys" aria-controls="panel-keys">Keys</button>
+                <button id="tab-precision" type="button" role="tab" data-tab="precision" aria-controls="panel-precision">Precision</button>
+                <button id="tab-metadata" type="button" role="tab" data-tab="metadata" aria-controls="panel-metadata">Metadata</button>
+                <button id="tab-json" type="button" role="tab" data-tab="json" aria-controls="panel-json">Raw JSON</button>
+            </nav>
+
+            <section id="panel-overview" class="tab-panel" role="tabpanel" data-panel="overview" aria-labelledby="tab-overview" hidden>
+                <div class="panel-card">
+                    <div class="panel-head">
+                        <h2>Components</h2>
+                        <span id="components-summary" class="muted"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Component</th>
+                                    <th class="num">Parameters</th>
+                                    <th class="num">Share</th>
+                                    <th class="num">Keys</th>
+                                </tr>
+                            </thead>
+                            <tbody id="components-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="panel-card">
+                        <div class="panel-head">
+                            <h2>Parameter distribution</h2>
+                            <span class="muted">By component</span>
+                        </div>
+                        <div id="overview-chart" class="chart"></div>
+                    </div>
+                    <div class="panel-card">
+                        <div class="panel-head">
+                            <h2>Architecture notes</h2>
+                        </div>
+                        <div id="architecture-notes" class="notes"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-architecture" class="tab-panel" role="tabpanel" data-panel="architecture" aria-labelledby="tab-architecture" hidden>
+                <div id="architecture-content"></div>
+            </section>
+
+            <section id="panel-principles" class="tab-panel" role="tabpanel" data-panel="principles" aria-labelledby="tab-principles" hidden>
+                <div id="principles-content"></div>
+            </section>
+
+            <section id="panel-keys" class="tab-panel" role="tabpanel" data-panel="keys" aria-labelledby="tab-keys" hidden>
+                <div class="panel-card">
+                    <div class="panel-head">
+                        <h2>Key browser</h2>
+                        <span id="keys-status" class="muted"></span>
+                    </div>
+
+                    <div id="keys-prefix-bar" class="keys-prefix-bar" hidden>
+                        <span class="muted">Block filter</span>
+                        <span id="keys-prefix-label" class="mono"></span>
+                        <button id="keys-prefix-clear" class="button" type="button">Clear block filter</button>
+                    </div>
+
+                    <div class="toolbar">
+                        <div class="field field-search">
+                            <label for="keys-search">Search</label>
+                            <input id="keys-search" type="search" placeholder="Filter by key name" autocomplete="off" spellcheck="false">
+                        </div>
+                        <div class="field">
+                            <label for="keys-component">Component</label>
+                            <select id="keys-component">
+                                <option value="all">All components</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="keys-dtype">Dtype</label>
+                            <select id="keys-dtype">
+                                <option value="all">All dtypes</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="keys-sort">Sort</label>
+                            <select id="keys-sort">
+                                <option value="name">Name A→Z</option>
+                                <option value="name-desc">Name Z→A</option>
+                                <option value="params-desc">Params high→low</option>
+                                <option value="params">Params low→high</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="keys-page-size">Rows</label>
+                            <select id="keys-page-size">
+                                <option value="50">50</option>
+                                <option value="100" selected>100</option>
+                                <option value="250">250</option>
+                            </select>
+                        </div>
+                        <label class="check">
+                            <input id="keys-attention" type="checkbox">
+                            <span>Attention only</span>
+                        </label>
+                    </div>
+
+                    <p class="muted key-hint">Click a key name to copy it. Attention matches attn / transformer keys.</p>
+                    <div id="keys-empty" class="empty" hidden></div>
+
+                    <div id="keys-table-wrap" class="table-wrap keys-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th>Component</th>
+                                    <th>Shape</th>
+                                    <th>Dtype</th>
+                                    <th class="num">Params</th>
+                                </tr>
+                            </thead>
+                            <tbody id="keys-body"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="keys-pagination" class="pagination">
+                        <button id="keys-prev" class="button" type="button" disabled>Previous</button>
+                        <span id="keys-page-label" class="muted"></span>
+                        <button id="keys-next" class="button" type="button" disabled>Next</button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-precision" class="tab-panel" role="tabpanel" data-panel="precision" aria-labelledby="tab-precision" hidden>
+                <div class="grid-2">
+                    <div class="panel-card">
+                        <div class="panel-head">
+                            <h2>Precision distribution</h2>
+                            <span class="muted">By parameter count</span>
+                        </div>
+                        <div id="precision-chart" class="chart tall"></div>
+                    </div>
+                    <div class="panel-card">
+                        <div class="panel-head">
+                            <h2>Distributions</h2>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Precision</th>
+                                        <th class="num">Parameters</th>
+                                        <th class="num">Share</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="precision-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="panel-head">
+                        <h2>Per component</h2>
+                        <span class="muted">Share is within each component</span>
+                    </div>
+                    <div id="precision-components" class="precision-grid"></div>
+                </div>
+            </section>
+
+            <section id="panel-metadata" class="tab-panel" role="tabpanel" data-panel="metadata" aria-labelledby="tab-metadata" hidden>
+                <div class="panel-card">
+                    <div class="panel-head">
+                        <h2>Metadata</h2>
+                        <span id="metadata-count" class="muted"></span>
+                    </div>
+                    <div id="metadata-empty" class="empty" hidden></div>
+                    <div id="metadata-table-wrap" class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="metadata-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-json" class="tab-panel" role="tabpanel" data-panel="json" aria-labelledby="tab-json" hidden>
+                <div class="panel-card">
+                    <div class="panel-head">
+                        <h2>Raw report JSON</h2>
+                        <button id="copy-json" class="button" type="button" disabled>Copy JSON</button>
+                    </div>
+                    <pre id="raw-json" class="json"></pre>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <span>ComfyUI Model Toolkit · report schema <span id="schema-version">—</span></span>
+        <span>All analysis runs locally on the ComfyUI host.</span>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/model_toolkit/report/assets/vendor/echarts.min.js"></script>
+    <script type="module" src="/model_toolkit/report/assets/report.js"></script>
+</body>
+</html>

@@ -29,9 +29,9 @@ class ComponentReplacer:
         }
     
     RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("替换结果",)
+    RETURN_NAMES = ("Replacement Result",)
     FUNCTION = "replace_component"
-    CATEGORY = "model_toolkit/修改"
+    CATEGORY = "model_toolkit/Editing"
     
     def replace_component(self, model_name, component, replacement_name, output_name):
         """替换模型组件
@@ -51,27 +51,28 @@ class ComponentReplacer:
             model_data = ModelUtils.load_model(model_path)
             
             if not model_data:
-                return ("❌ 无法加载目标模型",)
+                return ("❌ Failed to load target model",)
             
             # 加载替换组件（只从提取产物目录选，避免把模板 txt 当模型加载）
             replacement_path = folder_paths.get_full_path("model_toolkit_extracted", replacement_name)
             if not replacement_path:
-                return (f"❌ 未找到替换组件: {replacement_name}（请先运行「📤 组件提取器」生成）",)
+                return (f"❌ Replacement component not found: {replacement_name} (run the 📤 Component Extractor first)",)
 
             replacement_data = ModelUtils.load_model(replacement_path)
 
             if not replacement_data:
-                return (f"❌ 无法加载替换组件: {replacement_path}",)
+                return (f"❌ Failed to load replacement component: {replacement_path}",)
 
             # 按组件归属 + 形状替换（B7/B8：component 决定可写键集合）
             stats = ModelUtils.replace_component_keys(model_data, replacement_data, component)
             if stats["target_keys"] == 0:
-                return (f"❌ 目标模型中没有 {component} 组件，无法替换",)
+                return (f"❌ Target model has no {component} component to replace",)
 
             if stats["replaced"] == 0:
                 return (
-                    f"❌ 没有可替换的 {component} 键："
-                    f"形状不匹配 {stats['shape_mismatch']} 个，非本组件键 {stats['missing']} 个",
+                    f"❌ No {component} keys could be replaced: "
+                    f"{stats['shape_mismatch']} shape mismatches, "
+                    f"{stats['missing']} keys outside this component",
                 )
                 
             # 自动生成输出路径
@@ -85,14 +86,14 @@ class ComponentReplacer:
             # 保存修改后的模型
             save_path = os.path.join(folder_paths.output_directory, output_name)
             if ModelUtils.save_component(model_data, save_path):
-                detail = f"替换 {stats['replaced']}/{stats['target_keys']} 个 {component} 键"
+                detail = f"Replaced {stats['replaced']}/{stats['target_keys']} {component} keys"
                 if stats["shape_mismatch"]:
-                    detail += f"，跳过形状不匹配 {stats['shape_mismatch']} 个"
+                    detail += f", skipped {stats['shape_mismatch']} shape mismatches"
                 if stats["missing"]:
-                    detail += f"，忽略非 {component} 键 {stats['missing']} 个"
-                return (f"✅ {detail}，已保存到: {save_path}",)
+                    detail += f", ignored {stats['missing']} non-{component} keys"
+                return (f"✅ {detail}, saved to: {save_path}",)
             else:
-                return ("❌ 保存模型失败",)
+                return ("❌ Failed to save model",)
                 
         except Exception as e:
-            return (f"❌ 替换失败: {str(e)}",) 
+            return (f"❌ Replacement failed: {str(e)}",) 

@@ -127,7 +127,7 @@ class GroupingTest(unittest.TestCase):
         self.assertEqual(len(groups["UNET"]), 686)
         self.assertEqual(len(groups["VAE"]), 248)
         self.assertEqual(len(groups["CLIP"]), 197)
-        self.assertEqual(groups["其他"], [])
+        self.assertEqual(groups["Other"], [])
 
     def test_ema_still_uses_prefix_rule(self):
         """模板的 ema 段不可信，EMA 必须继续由 model_ema.* 前缀识别。"""

@@ -17,25 +17,25 @@ class PrecisionMixin:
         
         # 精度类型映射表
         precision_map = {
-            'torch.float32': 'FP32 (单精度)',
-            'torch.float16': 'FP16 (半精度)',
-            'torch.bfloat16': 'BF16 (脑浮点)',
+            'torch.float32': 'FP32 (Single precision)',
+            'torch.float16': 'FP16 (Half precision)',
+            'torch.bfloat16': 'BF16 (Brain float)',
             'torch.float8_e4m3fn': 'FP8 (E4M3)',
             'torch.float8_e5m2': 'FP8 (E5M2)',
-            'torch.int8': 'INT8 (量化)',
-            'torch.int4': 'INT4 (量化)',
-            'torch.uint8': 'UINT8 (量化)',
+            'torch.int8': 'INT8 (Quantized)',
+            'torch.int4': 'INT4 (Quantized)',
+            'torch.uint8': 'UINT8 (Quantized)',
         }
         
         # 精度友好名称
         precision_friendly = {
-            'float32': 'FP32 (单精度)',
-            'float16': 'FP16 (半精度)',
-            'bfloat16': 'BF16 (脑浮点)',
+            'float32': 'FP32 (Single precision)',
+            'float16': 'FP16 (Half precision)',
+            'bfloat16': 'BF16 (Brain float)',
             'float8': 'FP8',
-            'int8': 'INT8 (量化)',
-            'int4': 'INT4 (量化)',
-            'uint8': 'UINT8 (量化)',
+            'int8': 'INT8 (Quantized)',
+            'int4': 'INT4 (Quantized)',
+            'uint8': 'UINT8 (Quantized)',
         }
         
         # 遍历所有张量统计精度分布
@@ -58,13 +58,13 @@ class PrecisionMixin:
             elif dtype_str in precision_map:
                 precision_type = precision_map[dtype_str]
             else:
-                precision_type = f"其他 ({dtype_str})"
+                precision_type = f"Other ({dtype_str})"
             
             precision_counts[precision_type] += param_count
         
         # 计算百分比并确定主要精度类型
         precision_distributions = {}
-        primary_precision = "混合精度"
+        primary_precision = "Mixed precision"
         max_count = 0
         
         for prec_type, count in precision_counts.items():
@@ -77,14 +77,14 @@ class PrecisionMixin:
                 primary_precision = prec_type
         
         # 如果没有明确主要精度，检查是否为混合精度训练典型组合
-        if primary_precision == "混合精度":
-            fp16_percentage = precision_distributions.get('FP16 (半精度)', (0, 0))[1]
-            fp32_percentage = precision_distributions.get('FP32 (单精度)', (0, 0))[1]
+        if primary_precision == "Mixed precision":
+            fp16_percentage = precision_distributions.get('FP16 (Half precision)', (0, 0))[1]
+            fp32_percentage = precision_distributions.get('FP32 (Single precision)', (0, 0))[1]
             
             if fp16_percentage > 50 and fp32_percentage > 0:
-                primary_precision = "混合精度 (主要FP16)"
-            elif 'INT8 (量化)' in precision_distributions and precision_distributions['INT8 (量化)'][1] > 50:
-                primary_precision = "量化模型 (INT8)"
+                primary_precision = "Mixed precision (mostly FP16)"
+            elif 'INT8 (Quantized)' in precision_distributions and precision_distributions['INT8 (Quantized)'][1] > 50:
+                primary_precision = "Quantized model (INT8)"
         
         return {
             'distributions': precision_distributions,
@@ -98,13 +98,13 @@ class PrecisionMixin:
         
         # 精度友好名称
         precision_friendly = {
-            'float32': 'FP32 (单精度)',
-            'float16': 'FP16 (半精度)',
-            'bfloat16': 'BF16 (脑浮点)',
+            'float32': 'FP32 (Single precision)',
+            'float16': 'FP16 (Half precision)',
+            'bfloat16': 'BF16 (Brain float)',
             'float8': 'FP8',
-            'int8': 'INT8 (量化)',
-            'int4': 'INT4 (量化)',
-            'uint8': 'UINT8 (量化)'
+            'int8': 'INT8 (Quantized)',
+            'int4': 'INT4 (Quantized)',
+            'uint8': 'UINT8 (Quantized)'
         }
         
         # 处理每个组件
@@ -130,7 +130,7 @@ class PrecisionMixin:
                     if dtype_core in precision_friendly:
                         precision_type = precision_friendly[dtype_core]
                     else:
-                        precision_type = f"其他 ({dtype_str})"
+                        precision_type = f"Other ({dtype_str})"
                     
                     # 更新计数
                     curr_count, curr_pct = comp_precision[precision_type]

@@ -145,12 +145,12 @@ def load_specs(index_path=INDEX_PATH):
     """读取编译索引；文件缺失或损坏时返回空表（节点回退到前缀规则）。"""
     path = Path(index_path)
     if not path.is_file():
-        logger.error(f"架构模板索引缺失: {path}（请运行 tools/build_template_index.py）")
+        logger.error(f"Architecture template index missing: {path} (run tools/build_template_index.py)")
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
-        logger.error(f"读取架构模板索引失败: {str(e)}")
+        logger.error(f"Failed to load architecture template index: {str(e)}")
         return {}
 
     specs = {}
