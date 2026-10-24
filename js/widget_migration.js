@@ -1,8 +1,8 @@
 /**
  * 工作流控件兼容迁移：
- * - 1.2.0 → 当前版本：在模型检查器最前面补 model_dir；
- * - 旧 1.3.0（含「（全部）」与中文显示模式）→ 当前版本：
- *   「（全部）」改为 checkpoints，显示模式改为 Basic / Advanced。
+ * - 2.0.0 删除 show_details / show_charts，节点只剩 model_dir + model_name；
+ * - 1.2.0 → 2.0.0：三值数组保留 model_name，补 model_dir=checkpoints；
+ * - 1.3.0 → 2.0.0：四值数组保留前两项，丢弃两个已删除的控件。
  *
  * ComfyUI 按位置保存 widgets_values；新版前端还会额外保存
  * widgets_values_named。两种形态都要在节点 restore 前归一化。
@@ -16,6 +16,8 @@ const DETAIL_ALIASES = new Map([
 ]);
 
 const DETAIL_MODES = new Set(["Basic", "Advanced"]);
+
+const LEGACY_WIDGETS = ["show_details", "show_charts"];
 
 function normalizeDetail(value) {
     return DETAIL_ALIASES.get(value) || value;
@@ -35,18 +37,15 @@ export function migrateWidgetsValues(values) {
         if (!DETAIL_MODES.has(detail) || typeof showCharts !== "boolean") {
             return values;
         }
-        return [DEFAULT_DIR, modelName, detail, showCharts];
+        return [DEFAULT_DIR, modelName];
     }
 
-    // 旧 1.3.0：四值数组，可能带「（全部）」或中文显示模式
+    // 1.3.x：四值数组 [model_dir, model_name, show_details, show_charts]
     if (values.length === 4) {
-        const [rawDir, modelName, rawDetail, showCharts] = values;
+        const [rawDir, modelName, rawDetail] = values;
         const detail = normalizeDetail(rawDetail);
         if (!DETAIL_MODES.has(detail)) return values;
-
-        const dir = normalizeDir(rawDir);
-        if (dir === rawDir && detail === rawDetail) return values;
-        return [dir, modelName, detail, showCharts];
+        return [normalizeDir(rawDir), modelName];
     }
 
     return values;
@@ -66,10 +65,9 @@ export function migrateNamedWidgetsValues(named) {
         }
     }
 
-    if ("show_details" in migrated) {
-        const detail = normalizeDetail(migrated.show_details);
-        if (detail !== migrated.show_details) {
-            migrated.show_details = detail;
+    for (const key of LEGACY_WIDGETS) {
+        if (key in migrated) {
+            delete migrated[key];
             changed = true;
         }
     }

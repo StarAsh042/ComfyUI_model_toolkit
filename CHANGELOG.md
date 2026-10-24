@@ -1,6 +1,25 @@
 # 更新日志
 
-## [Unreleased]
+## [2.0.0] - 2026-10-25
+
+### 破坏性变更
+
+- **模型检查器改为零输出节点**：「分析报告」（`STRING`）与「可视化图表」
+  （`IMAGE`）输出已移除，`RETURN_TYPES = ()`。旧工作流里连到
+  `ShowText` / `SaveImage` 等下游节点的连线会断开，需要重新添加
+  Model Inspector 节点或删除悬空连线；分析结果改在交互式报告页查看。
+- **删除 `show_details` / `show_charts` 控件**：节点只保留 `model_dir` 与
+  `model_name`。页面内已有架构视图、参数/占比/仅结构开关以及 Markdown 导出。
+- **移除 matplotlib 图表链路与依赖**：删除 `model_toolkit/charts.py` 与
+  `tests/test_charts.py`，`requirements.txt` 只保留 `safetensors`、`pyyaml`；
+  `numpy`、`matplotlib`、`Pillow` 不再由插件声明，图表由浏览器渲染。
+- **执行语义调整**：节点执行改为 `prepare_report`——校验模型并预热报告缓存，
+  不再生成文字或图片；报告按钮仍先 `POST /api/model_toolkit/report/prepare`
+  重建报告再打开页面。
+- **旧工作流控件迁移**：1.2.0 三值数组保留 `model_name` 并补
+  `model_dir=checkpoints`；1.3.0 四值数组保留前两项；`widgets_values_named`
+  中的 `show_details` / `show_charts` 会被删除。「（全部）」仍映射为
+  `checkpoints`，控件位置不再错位。
 
 ### 新增
 
@@ -32,7 +51,6 @@
   `GET /model_toolkit/report`、静态 `GET /model_toolkit/report/assets/*`、
   `POST /model_toolkit/report/prepare`；`dir`/`model` 必须同时通过目录白名单与
   文件清单，解析后的真实路径须位于 `models/<dir>` 或 `extra_model_paths` 内。
-- 本阶段节点仍保留原有文字与图片输出，计划在 P4 / 2.0.0 移除。
 
 ### 修复
 
@@ -44,7 +62,9 @@
 - 新增 `tests/test_structure_unet.py`、`tests/test_report.py`、`tests/test_server.py`
   与 `tests/frontend/report_url.test.mjs`、`report_logic.test.mjs`、
   `unet_view.test.mjs`、`principles.test.mjs`；
-  Python 单测 144 项、Node 前端测试 48 项全部通过。
+  Python 单测 138 项、Node 前端测试 48 项全部通过。
+- 黄金样本切换为报告 JSON 规范化哈希（`report` / `report_no_keys`）+
+  替换器错误路径；旧的文本/图像哈希随节点输出一起退役。
 - 键名排序复用单个 `Intl.Collator`（P3），2,763 键的过滤与排序由约 80–100 ms
   降至 2–7 ms。
 

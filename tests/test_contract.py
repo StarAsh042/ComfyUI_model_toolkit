@@ -1,11 +1,11 @@
 """节点契约特征测试（G6 基线）。
 
-只记录重构前的现状：节点名、显示名、CATEGORY、输入顺序 / 类型 / 默认值、
+记录节点名、显示名、CATEGORY、输入顺序 / 类型 / 默认值、
 RETURN_TYPES / RETURN_NAMES / FUNCTION / OUTPUT_NODE / IS_CHANGED。
-重构不得改变任何一项；改了就说明越界（见《代码重构_ComfyUI插件.md》第八节）。
+重构不得改变任何一项；改了就说明越界。
 
-1.3.0 起的预期变更（见 CHANGELOG）：删除 UNetInspector；模型检查器
-新增 model_dir 输入（顶部目录选择，默认 checkpoints）；界面与输出改为英文。
+2.0.0 起的预期变更（见 CHANGELOG）：模型检查器变为零输出节点，
+执行语义改为校验并预热报告缓存；删除 show_details / show_charts。
 """
 import unittest
 from pathlib import Path
@@ -48,16 +48,14 @@ EXPECTED = {
     "ModelInspector": {
         "display": "🔍 Model Inspector",
         "category": "model_toolkit/Analysis",
-        "return_types": ("STRING", "IMAGE"),
-        "return_names": ("Analysis Report", "Visualization Chart"),
-        "function": "analyze_model",
-        "output_node": False,
+        "return_types": (),
+        "return_names": (),
+        "function": "prepare_report",
+        "output_node": True,
         "has_is_changed": True,
         "inputs": [
             ("required", "model_dir", "folders:models", None, "checkpoints", None),
             ("required", "model_name", "folder:checkpoints", None, None, None),
-            ("required", "show_details", "choices", ["Basic", "Advanced"], "Basic", None),
-            ("required", "show_charts", "BOOLEAN", None, True, None),
         ],
     },
     "ComponentExtractor": {
@@ -104,7 +102,7 @@ class ContractTest(unittest.TestCase):
         )
 
     def test_version(self):
-        self.assertEqual(pkg.__version__, "1.3.0")
+        self.assertEqual(pkg.__version__, "2.0.0")
 
     def test_architecture_templates_present(self):
         """模板已升级为 YAML：目录里不应再有旧的键清单 txt。"""
@@ -120,7 +118,9 @@ class ContractTest(unittest.TestCase):
                 self.assertEqual(pkg.NODE_DISPLAY_NAME_MAPPINGS[name], expected["display"])
                 self.assertEqual(cls.CATEGORY, expected["category"])
                 self.assertEqual(tuple(cls.RETURN_TYPES), expected["return_types"])
-                self.assertEqual(tuple(cls.RETURN_NAMES), expected["return_names"])
+                self.assertEqual(
+                    tuple(getattr(cls, "RETURN_NAMES", ())), expected["return_names"]
+                )
                 self.assertEqual(cls.FUNCTION, expected["function"])
                 self.assertEqual(getattr(cls, "OUTPUT_NODE", False), expected["output_node"])
                 self.assertEqual(hasattr(cls, "IS_CHANGED"), expected["has_is_changed"])
