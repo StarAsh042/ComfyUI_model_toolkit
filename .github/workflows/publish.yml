@@ -1,0 +1,57 @@
+name: Publish to Comfy registry
+
+# 触发条件：
+# 1) 手动触发（Actions 页面 Run workflow）
+# 2) 推送到 main 且 pyproject.toml 有变更（发布版本需要同时更新
+#    pyproject.toml 与 __init__.py 的 __version__，CI 会校验两者一致）
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+
+# 最小权限：checkout 与发布只需要读取仓库内容
+permissions:
+  contents: read
+
+jobs:
+  publish-node:
+    name: Publish Custom Node to registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.repository_owner == 'StarAsh042' }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify version consistency
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import tomllib
+
+          version = tomllib.loads(
+              pathlib.Path("pyproject.toml").read_text("utf-8")
+          )["project"]["version"]
+          source = pathlib.Path("__init__.py").read_text("utf-8")
+          match = re.search(r'__version__ = "([^"]+)"', source)
+          assert match and match.group(1) == version, (
+              match.group(1) if match else None,
+              version,
+          )
+          print("version:", version)
+          PY
+      - name: Publish Custom Node
+        # 官方文档推荐 @main（该 action 的 tag 只有 1.0.0/1.0.1，已落后于 main）
+        uses: Comfy-Org/publish-node-action@main
+        with:
+          ## 在仓库 Settings -> Secrets and variables -> Actions 中配置该 Secret
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          ## 上一步已完成 checkout，跳过该 action 内部重复的 actions/checkout
+          skip_checkout: "true"

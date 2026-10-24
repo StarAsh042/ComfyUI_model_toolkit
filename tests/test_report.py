@@ -15,12 +15,10 @@ import unittest
 from unittest import mock
 
 import _env  # noqa: F401  设置 sys.path
-
 import folder_paths
 import torch
-from safetensors.torch import save_file
-
 from ComfyUI_model_toolkit.model_toolkit import report
+from safetensors.torch import save_file
 
 REAL_MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
 METADATA = {
@@ -237,6 +235,7 @@ class SyntheticReportTest(unittest.TestCase):
         self.assertIn("boom", caught.exception.message)
 
 
+@unittest.skipUnless(_env.has_real_model(REAL_MODEL), "需要本机真实模型")
 class RealReportTest(unittest.TestCase):
     """真实模型：只读头部，验证数据层与结构提取的集成。"""
 

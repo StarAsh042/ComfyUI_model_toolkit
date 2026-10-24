@@ -11,10 +11,8 @@ import unittest
 from pathlib import Path
 
 import _env  # noqa: F401  设置 sys.path
-
-import folder_paths
-
 import ComfyUI_model_toolkit as pkg
+import folder_paths
 from ComfyUI_model_toolkit.model_toolkit.folders import list_model_dirs
 
 

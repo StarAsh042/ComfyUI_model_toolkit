@@ -8,7 +8,7 @@ import sys
 
 import folder_paths
 
-from .model_toolkit.core import ModelUtils
+from .model_toolkit.core import ModelUtils as ModelUtils
 
 # 简化日志配置（ComfyUI 已配置 root logger 时不覆盖宿主设置）
 if not logging.getLogger().handlers:
@@ -69,4 +69,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 }
 
 # 版本信息
-__version__ = "2.0.0" 
+__version__ = "2.0.0"

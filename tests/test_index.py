@@ -5,11 +5,9 @@ import time
 import unittest
 
 import _env  # noqa: F401  设置 sys.path
-
 import folder_paths
 import safetensors.torch
 import torch
-
 from ComfyUI_model_toolkit import ModelUtils
 from ComfyUI_model_toolkit.model_toolkit.report import build_report, clear_cache
 from ComfyUI_model_toolkit.nodes.checkpoint_inspector import CheckpointInspector

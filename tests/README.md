@@ -10,6 +10,20 @@ cd D:\AIGC\ComfyUI\custom_nodes\ComfyUI_model_toolkit
 & "D:\AIGC\ComfyUI\.ext\python.exe" -m unittest discover -s tests -v
 ```
 
+共 141 项；其中 12 项需要本机真实 SD1/SDXL 模型，模型不存在时自动跳过。
+CI（GitHub Actions）没有 ComfyUI 与真实模型，使用
+`tests/ci/folder_paths.py` 最小替身运行纯逻辑测试：
+
+```bash
+COMFYUI_DIR="$PWD/tests/ci" python -m unittest discover -s tests -v
+```
+
+替身会创建空的 checkpoints / loras / diffusion_models 目录与一个占位
+`.safetensors`，因此目录枚举类测试仍可执行；真实模型用例显示为 skipped。
+Runner 还需安装测试专用依赖 `tests/requirements-ci.txt`（numpy / aiohttp，
+不属于插件运行依赖）；工作流定义见 `.github/workflows/ci.yml`
+（Python + Node + Ruff，聚合 job `ci`）。
+
 ## 前端纯函数测试（Node 24+）
 
 ```powershell
@@ -37,7 +51,8 @@ UNet 交互视图 10 项（基础分辨率换算、阶段与块前缀、键过�
 
 2.0.0 起覆盖三个场景：完整报告 JSON、`include_keys=False` 的报告、
 替换器错误路径。比对报告 JSON 的规范化 SHA256（`sort_keys` + 紧凑分隔符）与
-摘要字段；节点零输出后不再比对文本/图像哈希。
+摘要字段；节点零输出后不再比对文本/图像哈希。黄金样本需要本机真实模型，
+**不在 CI 运行**。
 
 ## 服务层路由（P2）
 
@@ -84,6 +99,9 @@ Architecture 标签页的 UNet 结构视图（`web/report/views/unet.js`）与 P
 - `test_index.py` 的 `PrepareReportTest` 要求节点执行只预热报告缓存、
   不得调用 `ModelUtils.load_model`（全量加载）；报告 `summary.model_dir`
   记录解析时使用的目录。
+- `test_packaging.PyprojectTest` 锁定发布元数据：`pyproject.toml` 版本必须与
+  `__version__` 一致、依赖动态引用 `requirements.txt`、`[tool.comfy]` 发布信息存在；
+  发布前必须同时修改两处版本号。
 - 黄金样本基线于 2026-10-22 因 B1/B3/B4/B2 修复重建过；
   2026-10-24 因界面/输出英文化、默认目录改为 `checkpoints` 再次重建；
   2026-10-25（2.0.0）随节点零输出切换为报告 JSON 规范化哈希，旧文本/图像

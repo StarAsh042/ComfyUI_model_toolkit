@@ -2,10 +2,8 @@
 import unittest
 
 import _env  # noqa: F401  设置 sys.path
-
 import folder_paths
 import torch
-
 from ComfyUI_model_toolkit import ModelUtils
 
 UNET_KEY = "model.diffusion_model.input_blocks.0.0.weight"
@@ -83,7 +81,6 @@ class ReplaceFlowTest(unittest.TestCase):
         import tempfile
 
         import safetensors.torch
-
         from ComfyUI_model_toolkit.nodes.component_replacer import ComponentReplacer
 
         with tempfile.TemporaryDirectory() as tmp:

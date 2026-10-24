@@ -4,16 +4,19 @@ Component Extractor Node - 组件提取器节点
 """
 
 import os
+
 import folder_paths
+
 from .. import ModelUtils
 from ..model_toolkit import templates
 
+
 class ComponentExtractor:
     """组件提取器节点类"""
-    
+
     def __init__(self):
         pass
-    
+
     @classmethod
     def INPUT_TYPES(s):
         """定义节点输入参数"""
@@ -27,20 +30,20 @@ class ComponentExtractor:
                 })
             }
         }
-    
+
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("Extraction Result",)
     FUNCTION = "extract_component"
     CATEGORY = "model_toolkit/Editing"
-    
+
     def extract_component(self, model_name, component, output_name):
         """从模型中提取组件
-        
+
         Args:
             model_name (str): 模型文件名
             component (str): 组件类型
             output_name (str): 输出文件名
-            
+
         Returns:
             tuple[str]: 提取结果
         """
@@ -48,15 +51,15 @@ class ComponentExtractor:
             # 加载模型
             model_path = folder_paths.get_full_path("checkpoints", model_name)
             model_data = ModelUtils.load_model(model_path)
-            
+
             if not model_data:
                 return ("❌ Failed to load model file",)
-                
+
             # 获取组件键值
             groups = ModelUtils.group_model_keys(model_data)
             if component not in groups or not groups[component]:
                 return (f"❌ {component} component not found",)
-                
+
             # 提取组件数据
             extracted = {k: model_data[k] for k in groups[component]}
 
@@ -66,15 +69,15 @@ class ComponentExtractor:
             if spec:
                 hit, total = spec.contract(component, extracted.keys())
                 note = f", template {spec.identifier} matched {hit}/{total} keys"
-            
+
             # 自动生成输出路径
             if not output_name:
                 output_name = f"{os.path.splitext(model_name)[0]}_{component.lower()}"
-            
+
             # 确保有正确的扩展名
             if not output_name.endswith(('.safetensors', '.ckpt', '.pt')):
                 output_name += '.safetensors'
-            
+
             # 保存组件
             try:
                 save_dir = folder_paths.get_folder_paths("model_toolkit_extracted")[0]
@@ -86,6 +89,6 @@ class ComponentExtractor:
                 return (f"✅ Saved {component} component ({len(extracted)} keys{note}) to: {save_path}",)
             else:
                 return ("❌ Failed to save component",)
-                
+
         except Exception as e:
             return (f"❌ Extraction failed: {str(e)}",)
