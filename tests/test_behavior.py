@@ -7,14 +7,36 @@ CLIP 文本编码器键必须归 CLIP，不能因键含 'encoder' 被 VAE 抢走
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import _env  # noqa: F401  设置 sys.path
+import folder_paths
+import safetensors.torch
 import torch
 from ComfyUI_model_toolkit import ModelUtils
+from ComfyUI_model_toolkit.model_toolkit import templates
 from ComfyUI_model_toolkit.model_toolkit.analysis import AnalysisMixin
 from ComfyUI_model_toolkit.model_toolkit.precision import PrecisionMixin
 from ComfyUI_model_toolkit.nodes.component_extractor import ComponentExtractor
 from ComfyUI_model_toolkit.nodes.component_replacer import ComponentReplacer
+
+
+def _template_dual_vae_state(template="sdxl-sgm", dtype=torch.float16):
+    """模板命中的模型 + 完整裸 VAE 副本（形状全为 (1,)，只验证结构）。"""
+    spec = templates.get_specs()[template]
+    state = {key: torch.zeros((1,), dtype=dtype) for key in spec.trusted_keys()}
+    return spec, state
+
+
+def _add_bare_vae(state, spec, skip=(), shape_overrides=None):
+    """把模板 VAE 键去掉 first_stage_model. 前缀后加入 state。"""
+    overrides = shape_overrides or {}
+    for key in spec.keys("VAE"):
+        bare = key[len(templates.VAE_KEY_PREFIX):]
+        if bare in skip:
+            continue
+        shape = overrides.get(bare, (1,))
+        state[bare] = torch.zeros(shape, dtype=torch.float16)
 
 
 def _safetensors_keys(path):
@@ -82,6 +104,96 @@ class GroupModelKeysTest(unittest.TestCase):
             }
         )
         self.assertEqual(len(groups["VAE"]), 2)
+
+
+class DuplicateVAEGroupingTest(unittest.TestCase):
+    """完整裸 VAE 副本才归 VAE_DUPLICATE；其余情况保守保持原 VAE 分组。"""
+
+    def test_complete_duplicate_vae_moves_bare_copy(self):
+        spec, state = _template_dual_vae_state()
+        _add_bare_vae(state, spec)
+
+        groups = ModelUtils.group_model_keys(state)
+
+        main = spec.keys("VAE")
+        bare = {key[len(templates.VAE_KEY_PREFIX):] for key in main}
+        self.assertEqual(set(groups["VAE"]), main)
+        self.assertEqual(set(groups["VAE_DUPLICATE"]), bare)
+        self.assertIn("post_quant_conv.weight", groups["VAE_DUPLICATE"])
+        self.assertNotIn("post_quant_conv.weight", groups["Other"])
+        # 不丢键：所有物理键恰好归属一次
+        self.assertEqual(sum(len(keys) for keys in groups.values()), len(state))
+        self.assertEqual(set().union(*map(set, groups.values())), set(state))
+
+    def test_repeated_calls_are_stable(self):
+        spec, state = _template_dual_vae_state()
+        _add_bare_vae(state, spec)
+        original_keys = set(state)
+
+        first = ModelUtils.group_model_keys(state)
+        second = ModelUtils.group_model_keys(state)
+
+        snapshot = {name: sorted(keys) for name, keys in first.items()}
+        self.assertEqual({name: sorted(keys) for name, keys in second.items()}, snapshot)
+        self.assertEqual(set(state), original_keys)
+        self.assertEqual(len(first["VAE"]), 248)
+        self.assertEqual(len(first["VAE_DUPLICATE"]), 248)
+        self.assertEqual(len(second["VAE"]), 248)
+        self.assertEqual(len(second["VAE_DUPLICATE"]), 248)
+
+    def test_post_quant_conv_bare_key_falls_back_to_vae(self):
+        self.assertEqual(ModelUtils.classify_key("post_quant_conv.weight"), "VAE")
+        self.assertEqual(ModelUtils.classify_key("post_quant_conv.bias"), "VAE")
+
+    def test_bare_only_vae_stays_vae(self):
+        spec, _state = _template_dual_vae_state()
+        bare_state = {
+            key[len(templates.VAE_KEY_PREFIX):]: torch.zeros((1,), dtype=torch.float16)
+            for key in spec.keys("VAE")
+        }
+
+        groups = ModelUtils.group_model_keys(bare_state)
+
+        self.assertEqual(len(groups["VAE"]), 248)
+        self.assertIn("post_quant_conv.weight", groups["VAE"])
+        self.assertEqual(groups["Other"], [])
+        self.assertNotIn("VAE_DUPLICATE", groups)
+
+    def test_partial_copy_is_not_deduplicated(self):
+        spec, state = _template_dual_vae_state()
+        _add_bare_vae(state, spec, skip={"encoder.down.0.block.0.conv1.weight"})
+
+        groups = ModelUtils.group_model_keys(state)
+
+        self.assertEqual(len(groups["VAE"]), 248 + 247)
+        self.assertIn("first_stage_model.quant_conv.weight", groups["VAE"])
+        self.assertIn("quant_conv.weight", groups["VAE"])
+        self.assertIn("post_quant_conv.weight", groups["VAE"])
+        self.assertNotIn("VAE_DUPLICATE", groups)
+
+    def test_shape_mismatch_is_not_deduplicated(self):
+        spec, state = _template_dual_vae_state()
+        _add_bare_vae(
+            state, spec, shape_overrides={"decoder.conv_in.weight": (2,)}
+        )
+
+        groups = ModelUtils.group_model_keys(state)
+
+        self.assertEqual(len(groups["VAE"]), 248 + 248)
+        self.assertIn("decoder.conv_in.weight", groups["VAE"])
+        self.assertNotIn("VAE_DUPLICATE", groups)
+
+    def test_template_miss_is_not_deduplicated(self):
+        spec, _state = _template_dual_vae_state()
+        state = {
+            key: torch.zeros((1,), dtype=torch.float16) for key in spec.keys("VAE")
+        }
+        _add_bare_vae(state, spec)
+
+        groups = ModelUtils.group_model_keys(state)
+
+        self.assertEqual(len(groups["VAE"]), 248 + 248)
+        self.assertNotIn("VAE_DUPLICATE", groups)
 
 
 @unittest.skipUnless(
@@ -176,6 +288,54 @@ class AnalysisTest(unittest.TestCase):
         text = "\n".join(lines)
         self.assertIn("- Encoder keys: 0", text)
         self.assertIn("- Decoder keys: 1", text)
+
+
+class DuplicateVAEExtractionTest(unittest.TestCase):
+    """VAE 提取只保存主 first_stage_model.* 键，不混入完整裸副本。"""
+
+    def _extract(self, state, tmp):
+        model_path = str(Path(tmp) / "model.safetensors")
+        save_dir = Path(tmp) / "extracted"
+        safetensors.torch.save_file(state, model_path)
+
+        with mock.patch.object(
+            folder_paths,
+            "get_full_path",
+            side_effect=lambda folder, name: model_path if folder == "checkpoints" else None,
+        ), mock.patch.object(
+            folder_paths, "get_folder_paths", return_value=[str(save_dir)]
+        ), mock.patch.object(
+            folder_paths, "output_directory", str(tmp)
+        ):
+            text = ComponentExtractor().extract_component("model.safetensors", "VAE", "out")
+        return text[0], save_dir / "out.safetensors"
+
+    def test_complete_duplicate_vae_extracts_primary_keys_only(self):
+        spec, state = _template_dual_vae_state("sd1-ldm")
+        _add_bare_vae(state, spec)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            text, output_path = self._extract(state, tmp)
+            saved = safetensors.torch.load_file(str(output_path))
+
+        self.assertTrue(text.startswith("✅ Saved VAE component (248 keys"), text)
+        self.assertEqual(set(saved), spec.keys("VAE"))
+        self.assertFalse(any(key.startswith(templates.BARE_VAE_PREFIXES) for key in saved))
+
+    def test_bare_only_vae_keeps_legacy_extraction(self):
+        state = {
+            "encoder.conv_in.weight": torch.zeros((1,), dtype=torch.float16),
+            "decoder.conv_out.weight": torch.zeros((1,), dtype=torch.float16),
+            "quant_conv.weight": torch.zeros((1,), dtype=torch.float16),
+            "post_quant_conv.weight": torch.zeros((1,), dtype=torch.float16),
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            text, output_path = self._extract(state, tmp)
+            saved = safetensors.torch.load_file(str(output_path))
+
+        self.assertTrue(text.startswith("✅ Saved VAE component (4 keys"), text)
+        self.assertEqual(set(saved), set(state))
 
 
 class ErrorPathTest(unittest.TestCase):
