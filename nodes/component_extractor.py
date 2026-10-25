@@ -9,6 +9,7 @@ import folder_paths
 
 from .. import ModelUtils
 from ..model_toolkit import templates
+from ..model_toolkit.output_paths import UnsafeOutputPathError, resolve_output_path
 
 
 class ComponentExtractor:
@@ -48,6 +49,18 @@ class ComponentExtractor:
             tuple[str]: 提取结果
         """
         try:
+            # 输出路径先校验：越界输入不得进入模型加载/保存流程
+            default_output_name = f"{os.path.splitext(model_name)[0]}_{component.lower()}"
+            try:
+                save_dir = folder_paths.get_folder_paths("model_toolkit_extracted")[0]
+            except (KeyError, IndexError, AttributeError):
+                save_dir = folder_paths.output_directory
+
+            try:
+                save_path = resolve_output_path(save_dir, output_name, default_output_name)
+            except UnsafeOutputPathError as e:
+                return (f"❌ Invalid output_name: {e}",)
+
             # 加载模型
             model_path = folder_paths.get_full_path("checkpoints", model_name)
             model_data = ModelUtils.load_model(model_path)
@@ -70,21 +83,7 @@ class ComponentExtractor:
                 hit, total = spec.contract(component, extracted.keys())
                 note = f", template {spec.identifier} matched {hit}/{total} keys"
 
-            # 自动生成输出路径
-            if not output_name:
-                output_name = f"{os.path.splitext(model_name)[0]}_{component.lower()}"
-
-            # 确保有正确的扩展名
-            if not output_name.endswith(('.safetensors', '.ckpt', '.pt')):
-                output_name += '.safetensors'
-
             # 保存组件
-            try:
-                save_dir = folder_paths.get_folder_paths("model_toolkit_extracted")[0]
-            except (KeyError, IndexError, AttributeError):
-                save_dir = folder_paths.output_directory
-
-            save_path = os.path.join(save_dir, output_name)
             if ModelUtils.save_component(extracted, save_path):
                 return (f"✅ Saved {component} component ({len(extracted)} keys{note}) to: {save_path}",)
             else:

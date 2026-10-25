@@ -8,6 +8,7 @@ import os
 import folder_paths
 
 from .. import ModelUtils
+from ..model_toolkit.output_paths import UnsafeOutputPathError, resolve_output_path
 
 
 class ComponentReplacer:
@@ -49,6 +50,15 @@ class ComponentReplacer:
             tuple[str]: 替换结果
         """
         try:
+            # 输出路径先校验：越界输入不得进入模型加载/保存流程
+            default_output_name = f"{os.path.splitext(model_name)[0]}_replaced"
+            try:
+                save_path = resolve_output_path(
+                    folder_paths.output_directory, output_name, default_output_name
+                )
+            except UnsafeOutputPathError as e:
+                return (f"❌ Invalid output_name: {e}",)
+
             # 加载目标模型
             model_path = folder_paths.get_full_path("checkpoints", model_name)
             model_data = ModelUtils.load_model(model_path)
@@ -78,16 +88,7 @@ class ComponentReplacer:
                     f"{stats['missing']} keys outside this component",
                 )
 
-            # 自动生成输出路径
-            if not output_name:
-                output_name = f"{os.path.splitext(model_name)[0]}_replaced"
-
-            # 确保有正确的扩展名
-            if not output_name.endswith(('.safetensors', '.ckpt', '.pt')):
-                output_name += '.safetensors'
-
             # 保存修改后的模型
-            save_path = os.path.join(folder_paths.output_directory, output_name)
             if ModelUtils.save_component(model_data, save_path):
                 detail = f"Replaced {stats['replaced']}/{stats['target_keys']} {component} keys"
                 if stats["shape_mismatch"]:
