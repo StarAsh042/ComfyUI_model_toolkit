@@ -1,4 +1,4 @@
-"""用真实模型校验架构模板：覆盖率、架构判定、组件契约。
+"""用真实模型校验架构模板：模板召回、额外键比例、架构判定、组件契约。
 
 用法：
     python tools/validate_templates.py <模型路径> [<模型路径> ...]
@@ -38,9 +38,10 @@ def main(argv):
             continue
 
         keys = read_keys(path)
-        spec, coverage = templates.detect(keys)
+        spec, recall = templates.detect(keys)
         tag = spec.identifier if spec else "未识别"
-        print(f"\n{path.name} | {len(keys)} 键 | 判定 {tag} | 覆盖率 {coverage:.1%}")
+        detail = f" | 额外键 {spec.extra_key_ratio(keys):.1%}" if spec else ""
+        print(f"\n{path.name} | {len(keys)} 键 | 判定 {tag} | 模板召回 {recall:.1%}{detail}")
 
         if spec is None:
             failures += 1

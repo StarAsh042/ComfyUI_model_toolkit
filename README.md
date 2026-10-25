@@ -96,14 +96,25 @@
   `sdxl-diffusers_unet_only`、`sdxl-supermerger_blocks`
 - **Flux**：`flux-flux`；**SD3**：`sd3-comfyui`
 
-其中 SD1.x / SDXL 的 6 份模板参与**自动识别**：模型键被模板覆盖 ≥95% 时，
-组件归属按模板成员关系精确判定（SDXL 双文本编码器合并为 CLIP）。
+其中 SD1.x / SDXL 的 6 份模板参与**自动识别**，需同时满足：必需模板键召回 ≥95%、
+至少 32 个必需键命中、未忽略的额外键 ≤5%。命中后组件归属按模板成员关系精确判定
+（SDXL 双文本编码器合并为 CLIP）。
+
+`model_ema.*`、精确的训练/调度状态键、训练时写入的 baked embedding/LoRA 键，
+以及与模板等价的裸 VAE 副本（`encoder.*` 等）有明确忽略规则，不计入额外键；
+其他模板不认识的键仍计入额外键。报告字段 `template_coverage` 名称不变，
+数值现在表示上述必需模板键召回率。
+
+只含少量模板键的提取产物、UNet-only 的普通 SD1 裁切包，或缺少超过 5% 必需键的
+裁切包可能不再匹配完整模板，会回退到现有架构家族/前缀规则；专用的
+`sdxl-diffusers_unet_only` 模板仍支持。
+
 Flux/SD3 模板含 T5XXL、supermerger 模板只有 BLOCKS，超出当前节点能表达的组件范围，
 **数据已内置但暂不参与识别**。
 未命中模板的模型（SD2.x 等）回退到键前缀规则。
 
 模板细节与覆盖边界见 `components/architectures/README.md`；
-可用 `python tools/validate_templates.py <模型路径>` 校验某个模型是否被模板覆盖。
+可用 `python tools/validate_templates.py <模型路径>` 校验某个模型是否被模板识别。
 
 ### 架构识别与能力矩阵
 
@@ -123,8 +134,9 @@ Flux/SD3 模板含 T5XXL、supermerger 模板只有 BLOCKS，超出当前节点�
 
 ## 支持的组件
 
-节点按 **UNET / VAE / CLIP** 三类组件工作。当模型被架构模板覆盖（覆盖率 ≥ 95%）时，
-每个键的组件归属由模板成员关系直接判定；未覆盖的模型回退到键前缀规则。
+节点按 **UNET / VAE / CLIP** 三类组件工作。模型通过上述自动识别门槛
+（必需模板键召回 ≥95%、至少 32 个必需键命中、未忽略的额外键 ≤5%）时，
+每个键的组件归属由模板成员关系直接判定；未通过的模型回退到键前缀规则。
 
 ## 依赖要求
 

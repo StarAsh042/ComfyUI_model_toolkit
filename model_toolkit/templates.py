@@ -39,6 +39,33 @@ UNTRUSTED_COMPONENTS = {"EMA"}
 # 本项目节点能表达的组件：模板若含其它组件（T5XXL / BLOCKS 等），不参与自动识别
 REPRESENTABLE_COMPONENTS = {"UNET", "VAE", "CLIP", "EMA"}
 
+# 识别门槛：命中必需键数下限，防止「几个键的小模型」被当成完整架构
+MIN_REQUIRED_HITS = 32
+
+# 明确忽略的键：不属于任何模板组件，也不计入额外键
+IGNORED_KEYS = frozenset({
+    # 非 UNet 结构：LDM 调度器标量（上游 sched 组件已整体丢弃）
+    "alphas_cumprod",
+    "alphas_cumprod_prev",
+    "betas",
+    "log_one_minus_alphas_cumprod",
+    "posterior_log_variance_clipped",
+    "posterior_mean_coef1",
+    "posterior_mean_coef2",
+    "posterior_variance",
+    "sqrt_alphas_cumprod",
+    "sqrt_one_minus_alphas_cumprod",
+    "sqrt_recip_alphas_cumprod",
+    "sqrt_recipm1_alphas_cumprod",
+})
+
+# 前缀忽略：EMA（模板 ema 段不可信）、嵌入管理、训练时写入的 LoRA 键
+IGNORED_PREFIXES = ("model_ema.", "embedding_manager.", "lora_te_", "lora_unet_")
+
+# 裸 VAE 键前缀：仅当 first_stage_model.<key> 被本模板 VAE 收录时才视为等价
+BARE_VAE_PREFIXES = ("encoder.", "decoder.", "quant_conv.", "post_quant_conv.")
+VAE_KEY_PREFIX = "first_stage_model."
+
 # 模板（文件名 stem）→ 报告里显示的架构名
 DISPLAY_NAMES = {
     "sd1-ldm": "SD1.x",
@@ -77,6 +104,8 @@ class ArchitectureSpec:
         # 含 T5XXL / BLOCKS 等本项目无法表达的组件时，不参与自动识别
         self.supported = set(components).issubset(REPRESENTABLE_COMPONENTS)
         self._trusted = None
+        self._required = None
+        self._vae_keys = None
 
     @property
     def display_name(self):
@@ -102,12 +131,52 @@ class ArchitectureSpec:
             self._trusted = trusted
         return self._trusted
 
+    @property
+    def required_keys(self):
+        """所有非 EMA 组件的必需键并集（R）；EMA 段不可信，keys() 恒为空。"""
+        if self._required is None:
+            required = set()
+            for component in self.components:
+                required |= self.keys(component, required_only=True)
+            self._required = required
+        return self._required
+
+    def ignored(self, key):
+        """本模板明确忽略的键：不计入额外键（也不计入必需键命中）。
+
+        只做精确匹配与固定前缀匹配；形状/dtype 不在此校验，
+        未知键一律算额外键，不做模糊忽略。
+        """
+        if key in IGNORED_KEYS or key.startswith(IGNORED_PREFIXES):
+            return True
+        for prefix in BARE_VAE_PREFIXES:
+            if key.startswith(prefix):
+                if self._vae_keys is None:
+                    self._vae_keys = self.keys("VAE")
+                return VAE_KEY_PREFIX + key in self._vae_keys
+        return False
+
+    def required_hits(self, model_keys):
+        """|R ∩ M|：模型命中的必需键数。"""
+        return len(self.required_keys & set(model_keys))
+
     def coverage(self, model_keys):
-        """模型键被模板覆盖的比例（模板认不认得这个模型）。"""
-        model_keys = set(model_keys)
-        if not model_keys:
+        """模板召回率：|R ∩ M| / |R|（R 为空时 0）。
+
+        衡量的是「模板的必需键有多少被模型命中」，与模型里多出来的键无关；
+        额外键另由 extra_key_ratio() 表达。
+        """
+        required = self.required_keys
+        if not required:
             return 0.0
-        return len(self.trusted_keys() & model_keys) / len(model_keys)
+        return len(required & set(model_keys)) / len(required)
+
+    def extra_key_ratio(self, model_keys):
+        """额外键比例：|S - T| / |S|，S 为模型键去掉本模板明确忽略的键（S 为空时 0）。"""
+        considered = {key for key in set(model_keys) if not self.ignored(key)}
+        if not considered:
+            return 0.0
+        return len(considered - self.trusted_keys()) / len(considered)
 
     def assignment(self, keys):
         """逐键判定组件：返回 {键: 组件名}，只包含模板收录且可信的键。"""
@@ -176,23 +245,38 @@ def get_specs():
 
 
 def detect(model_keys, specs=None, min_coverage=0.95):
-    """按覆盖率选出架构模板；只考虑节点能表达的组件。
+    """按模板召回率选出架构模板；只考虑节点能表达的组件。
 
-    同一架构可能有多份模板（如 SDXL 的 sgm / kohya），取覆盖率最高者；
-    覆盖率相同时按 identifier 字典序先到先得（加载顺序稳定）。
+    识别条件（三者同时满足）：
+    - required_hits >= MIN_REQUIRED_HITS：命中必需键数够多，排除小子集误判
+    - coverage >= min_coverage：模板必需键基本被命中
+    - extra_key_ratio <= 1 - min_coverage：模型里基本没有模板不认识的多余键
+
+    合格者取召回率最高者；召回率相同时按 identifier 字典序（稳定）。
+    都不合格时返回 (None, 受支持模板的最高召回率)；空 specs 返回 (None, 0)。
     """
     specs = get_specs() if specs is None else specs
-    best, best_coverage = None, 0.0
+    keys = set(model_keys)
+    max_extra = 1.0 - min_coverage
+    best_coverage = 0.0
+    qualified = []
     for identifier in sorted(specs):
         spec = specs[identifier]
         if not spec.supported:
             continue
-        coverage = spec.coverage(model_keys)
+        coverage = spec.coverage(keys)
         if coverage > best_coverage:
-            best, best_coverage = spec, coverage
-    if best is not None and best_coverage >= min_coverage:
-        return best, best_coverage
-    return None, best_coverage
+            best_coverage = coverage
+        if (
+            spec.required_hits(keys) >= MIN_REQUIRED_HITS
+            and coverage >= min_coverage
+            and spec.extra_key_ratio(keys) <= max_extra
+        ):
+            qualified.append((coverage, identifier, spec))
+    if not qualified:
+        return None, best_coverage
+    qualified.sort(key=lambda item: (-item[0], item[1]))
+    return qualified[0][2], qualified[0][0]
 
 
 def component_of(spec, key):
