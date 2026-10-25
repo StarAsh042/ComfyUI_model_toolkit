@@ -81,18 +81,32 @@ class ComponentReplacer:
             if stats["target_keys"] == 0:
                 return (f"❌ Target model has no {component} component to replace",)
 
-            if stats["replaced"] == 0:
+            # 默认严格全量：任何形状不匹配或缺失目标键都在写盘前拒绝
+            if (
+                stats["shape_mismatch"]
+                or stats["uncovered"]
+                or stats["replaced"] != stats["target_keys"]
+            ):
                 return (
-                    f"❌ No {component} keys could be replaced: "
+                    f"❌ Incomplete {component} replacement "
+                    f"({stats['replaced']}/{stats['target_keys']} target keys replaced): "
                     f"{stats['shape_mismatch']} shape mismatches, "
-                    f"{stats['missing']} keys outside this component",
+                    f"{stats['uncovered']} target keys missing from replacement, "
+                    f"{stats['missing']} replacement keys not in target {component}; "
+                    "output not written",
+                )
+
+            # 只继承目标模型 safetensors 头部的 metadata，并剔除校验类标签；
+            # 不读取替换源 metadata，也不合并旧输出文件的 metadata。
+            metadata = {}
+            if ModelUtils.is_safetensors_path(model_path):
+                metadata = ModelUtils.filter_replacement_metadata(
+                    ModelUtils.read_safetensors_metadata(model_path)
                 )
 
             # 保存修改后的模型
-            if ModelUtils.save_component(model_data, save_path):
+            if ModelUtils.save_component(model_data, save_path, metadata=metadata):
                 detail = f"Replaced {stats['replaced']}/{stats['target_keys']} {component} keys"
-                if stats["shape_mismatch"]:
-                    detail += f", skipped {stats['shape_mismatch']} shape mismatches"
                 if stats["missing"]:
                     detail += f", ignored {stats['missing']} non-{component} keys"
                 return (f"✅ {detail}, saved to: {save_path}",)

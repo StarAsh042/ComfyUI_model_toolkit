@@ -39,15 +39,19 @@ def _add_bare_vae(state, spec, skip=(), shape_overrides=None):
         state[bare] = torch.zeros(shape, dtype=torch.float16)
 
 
-def _safetensors_keys(path):
-    """只读 safetensors 文件头，返回键名列表（不加载权重）。"""
+def _safetensors_header(path):
+    """读取 safetensors 原始头部 JSON（用于断言 __metadata__ 是否真实存在）。"""
     import json
     import struct
 
     with open(path, "rb") as f:
         header_size = struct.unpack("<Q", f.read(8))[0]
-        header = json.loads(f.read(header_size))
-    return [key for key in header if key != "__metadata__"]
+        return json.loads(f.read(header_size))
+
+
+def _safetensors_keys(path):
+    """只读 safetensors 文件头，返回键名列表（不加载权重）。"""
+    return [key for key in _safetensors_header(path) if key != "__metadata__"]
 
 
 def _sd1_like_state_dict():
@@ -251,6 +255,181 @@ class LoadSaveTest(unittest.TestCase):
             self.assertEqual(tuple(loaded["a"].shape), (2,))
 
 
+class SaveComponentMetadataTest(unittest.TestCase):
+    """save_component 的 metadata 契约：None/{}、非空、非法与 ckpt 行为。"""
+
+    def test_none_and_empty_metadata_write_no_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for label, metadata in (("none", None), ("empty", {})):
+                with self.subTest(label=label):
+                    path = Path(tmp) / f"{label}.safetensors"
+
+                    self.assertTrue(
+                        ModelUtils.save_component(
+                            {"w": torch.ones(2)}, str(path), metadata=metadata
+                        )
+                    )
+
+                    self.assertNotIn("__metadata__", _safetensors_header(path))
+                    self.assertEqual(sorted(safetensors.torch.load_file(str(path))), ["w"])
+
+    def test_non_empty_metadata_is_written_without_filtering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "metadata.safetensors"
+            metadata = {
+                "format": "pt",
+                "sha256": "writer-must-not-filter",
+                "File_Hash": "still-here",
+            }
+
+            self.assertTrue(
+                ModelUtils.save_component({"w": torch.ones(2)}, str(path), metadata=metadata)
+            )
+
+            self.assertEqual(_safetensors_header(path)["__metadata__"], metadata)
+
+    def test_invalid_metadata_returns_false_before_touching_disk(self):
+        invalid = (["format"], {"format": 1}, {1: "pt"}, {"sha256": 1})
+        with tempfile.TemporaryDirectory() as tmp:
+            for index, metadata in enumerate(invalid):
+                with self.subTest(metadata=metadata):
+                    path = Path(tmp) / f"case_{index}" / "component.safetensors"
+
+                    self.assertFalse(
+                        ModelUtils.save_component(
+                            {"w": torch.ones(2)}, str(path), metadata=metadata
+                        )
+                    )
+
+                    self.assertFalse(path.parent.exists(), "非法 metadata 不得创建目录")
+
+            existing = Path(tmp) / "existing.safetensors"
+            safetensors.torch.save_file({"old": torch.ones(1)}, str(existing))
+            self.assertFalse(
+                ModelUtils.save_component(
+                    {"w": torch.ones(2)}, str(existing), metadata={"format": 1}
+                )
+            )
+            self.assertEqual(sorted(safetensors.torch.load_file(str(existing))), ["old"])
+
+    def test_ckpt_ignores_valid_metadata_but_rejects_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "component.ckpt"
+            self.assertTrue(
+                ModelUtils.save_component(
+                    {"w": torch.ones(2)}, str(path), metadata={"format": "pt"}
+                )
+            )
+            payload = torch.load(str(path), map_location="cpu", weights_only=True)
+            self.assertEqual(sorted(payload), ["state_dict"])
+            self.assertEqual(sorted(payload["state_dict"]), ["w"])
+            with self.assertRaises(safetensors.SafetensorError):
+                safetensors.torch.load_file(str(path))
+
+            invalid_path = Path(tmp) / "invalid" / "component.ckpt"
+            self.assertFalse(
+                ModelUtils.save_component(
+                    {"w": torch.ones(2)}, str(invalid_path), metadata={"format": 1}
+                )
+            )
+            self.assertFalse(invalid_path.parent.exists())
+
+
+class ReplacementMetadataFilterTest(unittest.TestCase):
+    """filter_replacement_metadata：只按键名剔除校验类标签。"""
+
+    DROP_TOKENS = (
+        "hash",
+        "checksum",
+        "digest",
+        "sha1",
+        "sha2",
+        "sha224",
+        "sha256",
+        "sha384",
+        "sha512",
+        "sha3",
+        "shasum",
+        "md5",
+        "crc",
+        "blake",
+        "blake2",
+        "blake3",
+    )
+
+    def test_none_returns_new_empty_dict(self):
+        first = ModelUtils.filter_replacement_metadata(None)
+        second = ModelUtils.filter_replacement_metadata(None)
+
+        self.assertEqual(first, {})
+        self.assertIsInstance(first, dict)
+        self.assertIsNot(first, second)
+
+    def test_rejects_non_mapping_and_non_string_entries(self):
+        for metadata in ([], "format=pt", 1, 1.5, object()):
+            with self.subTest(metadata=metadata):
+                with self.assertRaises(TypeError):
+                    ModelUtils.filter_replacement_metadata(metadata)
+
+        for metadata in ({1: "pt"}, {"format": 1}, {"sha256": 1}, {"x": None}):
+            with self.subTest(metadata=metadata):
+                with self.assertRaises(TypeError):
+                    ModelUtils.filter_replacement_metadata(metadata)
+
+    def test_drops_checksum_like_keys_case_and_separators(self):
+        metadata = {}
+        for token in self.DROP_TOKENS:
+            metadata[f"File-{token.upper()}_Value"] = "x"
+        metadata["Model.SHA_256"] = "x"
+        metadata["my.digest"] = "x"
+
+        self.assertEqual(ModelUtils.filter_replacement_metadata(metadata), {})
+
+    def test_drops_sha2_shasum_and_blake_variants(self):
+        """新增 token：sha2 / sha-2 / sha2-256 / shasum / blake 均剔除。"""
+        metadata = {
+            "sha2": "x",
+            "sha-2": "x",
+            "sha2-256": "x",
+            "shasum": "x",
+            "blake": "x",
+        }
+
+        self.assertEqual(ModelUtils.filter_replacement_metadata(metadata), {})
+
+    def test_keeps_bare_sha_shape_and_shard_keys(self):
+        """裸 sha 不是 token：sha / shape / shard 必须保留。"""
+        metadata = {
+            "sha": "sha2-256-looking-value",
+            "shape": "sha256-looking-value",
+            "shard": "md5",
+        }
+
+        self.assertEqual(ModelUtils.filter_replacement_metadata(metadata), metadata)
+
+    def test_keeps_plain_labels_and_hash_like_values(self):
+        metadata = {
+            "format": "pt",
+            "shape": "sha256-looking-value",
+            "shard": "md5",
+            "author": "blake3",
+            "description": "checksum is a word",
+        }
+
+        self.assertEqual(ModelUtils.filter_replacement_metadata(metadata), metadata)
+
+    def test_input_unchanged_and_filter_is_idempotent(self):
+        metadata = {"Format": "pt", "My-Hash": "x", "author": "sha256"}
+        snapshot = dict(metadata)
+
+        filtered = ModelUtils.filter_replacement_metadata(metadata)
+
+        self.assertEqual(metadata, snapshot)
+        self.assertIsNot(filtered, metadata)
+        self.assertEqual(filtered, {"Format": "pt", "author": "sha256"})
+        self.assertEqual(ModelUtils.filter_replacement_metadata(filtered), filtered)
+
+
 class SafetensorsExtensionTest(unittest.TestCase):
     """safetensors 扩展名大小写与 .sft 在加载/保存链路上保持一致。"""
 
@@ -416,6 +595,45 @@ class DuplicateVAEExtractionTest(unittest.TestCase):
 
         self.assertTrue(text.startswith("✅ Saved VAE component (4 keys"), text)
         self.assertEqual(set(saved), set(state))
+
+
+class ExtractorMetadataTest(unittest.TestCase):
+    """提取器不复制源 metadata，并保持 save_component 的两参数调用。"""
+
+    def test_extractor_does_not_copy_metadata(self):
+        state = {"first_stage_model.decoder.conv_in.weight": torch.zeros(3, 3)}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            model_path = str(Path(tmp) / "model.safetensors")
+            save_dir = Path(tmp) / "extracted"
+            safetensors.torch.save_file(
+                state,
+                model_path,
+                metadata={"format": "pt", "sha256": "source-digest"},
+            )
+
+            with mock.patch.object(
+                folder_paths,
+                "get_full_path",
+                side_effect=lambda folder, name: (
+                    model_path if folder == "checkpoints" else None
+                ),
+            ), mock.patch.object(
+                folder_paths, "get_folder_paths", return_value=[str(save_dir)]
+            ), mock.patch.object(
+                folder_paths, "output_directory", str(tmp)
+            ), mock.patch.object(
+                ModelUtils, "save_component", wraps=ModelUtils.save_component
+            ) as save_mock:
+                (text,) = ComponentExtractor().extract_component(
+                    "model.safetensors", "VAE", "out"
+                )
+
+            output_path = save_dir / "out.safetensors"
+            self.assertTrue(text.startswith("✅ Saved VAE component (1 keys"), text)
+            self.assertNotIn("__metadata__", _safetensors_header(output_path))
+            self.assertEqual(len(save_mock.call_args.args), 2)
+            self.assertFalse(save_mock.call_args.kwargs)
 
 
 class ErrorPathTest(unittest.TestCase):
