@@ -202,7 +202,7 @@ class ModelUtils:
         if unet_prefix and key.startswith(unet_prefix):
             return 'UNET'
         # 提取产物（键已去掉完整前缀）的兜底规则
-        if key.startswith(('encoder.', 'decoder.', 'quant_conv.')):
+        if key.startswith(('encoder.', 'decoder.', 'quant_conv.', 'post_quant_conv.')):
             return 'VAE'
         if key.startswith(('text_model.', 'transformer.')):
             return 'CLIP'
@@ -210,12 +210,68 @@ class ModelUtils:
             return 'UNET'
         return 'Other'
 
+    @staticmethod
+    def _tensor_shape(value):
+        """取张量形状；无法判断（例如测试桩传入 None）时返回 None。"""
+        shape = getattr(value, "shape", None)
+        if shape is None:
+            return None
+        try:
+            return tuple(shape)
+        except TypeError:
+            return None
+
+    @classmethod
+    def _duplicate_vae_keys(cls, model_data, spec, bare_prefixes, vae_prefix):
+        """找出可整体归入 ``VAE_DUPLICATE`` 的裸 VAE 键；条件不足返回空集。
+
+        成立条件（全部满足）：
+        - ``templates.detect`` 已命中；
+        - 主 ``first_stage_model.*`` 键非空、全部属于模板 VAE，且覆盖模板的
+          全部必需 VAE 键；
+        - 裸 encoder/decoder/quant_conv/post_quant_conv 键集合，与主键去掉
+          ``first_stage_model.`` 前缀后的集合完全相等；
+        - 每一对主键/裸键的 shape 完全一致。
+
+        这里只确认「完整结构副本」，不读取也不比较权重内容，因此不能据此
+        声称两份权重数值相同。任一条件不满足都保守返回空集，保持原 VAE 分组。
+        """
+        if spec is None:
+            return set()
+
+        keys = list(model_data)
+        template_vae = spec.keys("VAE")
+        primary = [key for key in keys if key.startswith(vae_prefix)]
+        if not primary:
+            return set()
+        if not set(primary).issubset(template_vae):
+            return set()
+        if not spec.keys("VAE", required_only=True).issubset(primary):
+            return set()
+
+        stripped = {key[len(vae_prefix):] for key in primary}
+        bare = {key for key in keys if key.startswith(bare_prefixes)}
+        if bare != stripped:
+            return set()
+
+        for key in primary:
+            bare_key = key[len(vae_prefix):]
+            main_shape = cls._tensor_shape(model_data[key])
+            bare_shape = cls._tensor_shape(model_data[bare_key])
+            if main_shape is None or bare_shape is None or main_shape != bare_shape:
+                return set()
+
+        return bare
+
     @classmethod
     def group_model_keys(cls, model_data):
         """将模型键值按组件分组。
 
         已知架构（模板覆盖率达标）按模板逐键判定，不再靠前缀猜；
         模板未收录的键与未知架构回退到前缀规则。
+
+        完整裸 VAE 副本（见 :meth:`_duplicate_vae_keys`）整体归入
+        ``VAE_DUPLICATE``；主 ``first_stage_model.*`` 键仍留在 ``VAE``。
         """
         keys = list(model_data.keys())
         unet_prefix = cls.detect_unet_prefix(keys)
@@ -225,8 +281,17 @@ class ModelUtils:
 
         spec, _ = templates.detect(keys)
         spec_map = spec.assignment(keys) if spec else {}
+        duplicate_keys = cls._duplicate_vae_keys(
+            model_data,
+            spec,
+            templates.BARE_VAE_PREFIXES,
+            templates.VAE_KEY_PREFIX,
+        )
 
         for key in keys:
+            if key in duplicate_keys:
+                groups['VAE_DUPLICATE'].append(key)
+                continue
             groups[spec_map.get(key) or cls.classify_key(key, unet_prefix)].append(key)
 
         return groups

@@ -20,7 +20,7 @@ logger = logging.getLogger(__package__.split(".")[0])
 
 SCHEMA_VERSION = "1.0"
 
-_COMPONENT_ORDER = ("UNET", "CLIP", "VAE", "EMA", "Other")
+_COMPONENT_ORDER = ("UNET", "CLIP", "VAE", "VAE_DUPLICATE", "EMA", "Other")
 
 
 class ReportError(Exception):

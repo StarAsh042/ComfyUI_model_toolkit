@@ -17,10 +17,12 @@ from unittest import mock
 import _env  # noqa: F401  设置 sys.path
 import folder_paths
 import torch
-from ComfyUI_model_toolkit.model_toolkit import report
+from ComfyUI_model_toolkit.model_toolkit import report, templates
 from safetensors.torch import save_file
 
 REAL_MODEL = r"Mine\SD1\Alpha_Anime_2.5D_fp16_v7.safetensors"
+PONY_MODEL = r"Mine\Pony\Alpha_Anime_Pony_v1_fp16.safetensors"
+SDXL_MODEL = r"Mine\SDXL\Alpha_Nai_v1_fp16.safetensors"
 METADATA = {
     "modelspec.architecture": "stable-diffusion-v1",
     "note": "<script>alert(1)</script>",
@@ -48,6 +50,16 @@ def _tiny_state_dict():
         ),
         "first_stage_model.decoder.conv_in.weight": zeros((8, 4, 3, 3)),
     }
+
+
+def _template_dual_vae_state(template="sdxl-sgm"):
+    """模板命中的模型 + 完整裸 VAE 副本；只关心键与形状，不关心权重值。"""
+    spec = templates.get_specs()[template]
+    state = {key: torch.zeros((1,), dtype=torch.float16) for key in spec.trusted_keys()}
+    for key in spec.keys("VAE"):
+        bare = key[len(templates.VAE_KEY_PREFIX):]
+        state[bare] = torch.zeros((1,), dtype=torch.float16)
+    return spec, state
 
 
 def _strings(value):
@@ -99,6 +111,7 @@ class SyntheticReportTest(unittest.TestCase):
         self.assertIsNone(data["architecture"]["template"])
 
         self.assertEqual(list(data["components"]), ["UNET", "CLIP", "VAE"])
+        self.assertNotIn("VAE_DUPLICATE", data["components"])
         self.assertEqual(
             sum(component["params"] for component in data["components"].values()), total
         )
@@ -237,6 +250,88 @@ class SyntheticReportTest(unittest.TestCase):
         self.assertIn("boom", caught.exception.message)
 
 
+class SyntheticDuplicateVAEReportTest(unittest.TestCase):
+    """完整裸 VAE 副本：报告复用 components/keys/precision，不新增顶层结构。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = self._tmp.name
+        self.path = os.path.join(self.tmp, "dual_vae.safetensors")
+        self.spec, self.state = _template_dual_vae_state()
+        save_file(self.state, self.path, metadata=METADATA)
+
+        self._orig_resolve = report.resolve_model_path
+        report.resolve_model_path = lambda model_dir, model_name: self.path
+        self.addCleanup(self._restore_resolve)
+        report.clear_cache()
+        self.addCleanup(report.clear_cache)
+
+    def _restore_resolve(self):
+        report.resolve_model_path = self._orig_resolve
+
+    def _build(self):
+        return report.build_report("checkpoints", "dual_vae.safetensors")
+
+    def test_components_and_schema(self):
+        data = self._build()
+        total = sum(tensor.numel() for tensor in self.state.values())
+
+        self.assertEqual(data["schema_version"], report.SCHEMA_VERSION)
+        self.assertNotIn("duplicates", data)
+        self.assertEqual(
+            list(data["components"]), ["UNET", "CLIP", "VAE", "VAE_DUPLICATE"]
+        )
+        self.assertEqual(data["components"]["VAE"]["key_count"], 248)
+        self.assertEqual(data["components"]["VAE_DUPLICATE"]["key_count"], 248)
+        self.assertEqual(data["components"]["VAE"]["params"], 248)
+        self.assertEqual(data["components"]["VAE_DUPLICATE"]["params"], 248)
+        self.assertEqual(data["summary"]["total_params"], total)
+        self.assertEqual(data["summary"]["key_count"], len(self.state))
+        self.assertEqual(data["summary"]["component_count"], 4)
+        self.assertEqual(
+            sum(component["key_count"] for component in data["components"].values()),
+            len(self.state),
+        )
+        self.assertEqual(
+            sum(component["params"] for component in data["components"].values()), total
+        )
+        self.assertAlmostEqual(
+            sum(component["percentage"] for component in data["components"].values()),
+            100.0,
+            places=1,
+        )
+
+    def test_key_entries_attribute_bare_copy_to_duplicate(self):
+        data = self._build()
+        entries = {entry["name"]: entry for entry in data["keys"]}
+
+        self.assertEqual(set(entries), set(self.state))
+        self.assertEqual(len(data["keys"]), len(self.state))
+        self.assertEqual(
+            entries["first_stage_model.post_quant_conv.weight"]["component"], "VAE"
+        )
+        self.assertEqual(entries["post_quant_conv.weight"]["component"], "VAE_DUPLICATE")
+        self.assertNotEqual(entries["post_quant_conv.weight"]["component"], "Other")
+
+    def test_precision_components_cover_duplicate_and_conserve_params(self):
+        data = self._build()
+        precision = data["precision"]
+
+        self.assertEqual(
+            set(precision["components"]), set(data["components"])
+        )
+        for name, info in data["components"].items():
+            self.assertEqual(
+                sum(entry["params"] for entry in precision["components"][name]),
+                info["params"],
+            )
+        self.assertEqual(
+            sum(entry["params"] for entry in precision["components"]["VAE_DUPLICATE"]),
+            data["components"]["VAE"]["params"],
+        )
+
+
 @unittest.skipUnless(_env.has_real_model(REAL_MODEL), "需要本机真实模型")
 class RealReportTest(unittest.TestCase):
     """真实模型：只读头部，验证数据层与结构提取的集成。"""
@@ -288,6 +383,97 @@ class RealReportTest(unittest.TestCase):
 
     def test_real_key_entries(self):
         self.assertEqual(len(self.data["keys"]), 1133)
+
+
+@unittest.skipUnless(_env.has_real_model(PONY_MODEL), "需要本机真实模型")
+class RealDuplicateVAEReportTest(unittest.TestCase):
+    """Pony：主 VAE + 完整裸副本，报告应按 VAE / VAE_DUPLICATE 各 248 键。"""
+
+    @classmethod
+    def setUpClass(cls):
+        report.clear_cache()
+        cls.data = report.build_report("checkpoints", PONY_MODEL)
+
+    @classmethod
+    def tearDownClass(cls):
+        report.clear_cache()
+
+    def test_components_and_conservation(self):
+        data = self.data
+        # 卡面值为 83,653,853；按真实头部逐键 numel 求和为 83,653,863。
+        # 独立比对 models/vae/SDXL_VAE_FP16.safetensors 的 248 个核心键同样是
+        # 83,653,863（另有 2 个 model_ema 标量），故以实测值为准，不凑数。
+        vae_params = 83_653_863
+
+        self.assertEqual(data["summary"]["key_count"], 2763)
+        self.assertEqual(data["summary"]["total_params"], 3_552_491_808)
+        self.assertEqual(list(data["components"]), ["UNET", "CLIP", "VAE", "VAE_DUPLICATE"])
+        self.assertEqual(data["components"]["VAE"]["key_count"], 248)
+        self.assertEqual(data["components"]["VAE_DUPLICATE"]["key_count"], 248)
+        self.assertEqual(data["components"]["VAE"]["params"], vae_params)
+        self.assertEqual(data["components"]["VAE_DUPLICATE"]["params"], vae_params)
+        self.assertNotIn("Other", data["components"])
+        self.assertEqual(
+            sum(component["key_count"] for component in data["components"].values()),
+            data["summary"]["key_count"],
+        )
+        self.assertEqual(
+            sum(component["params"] for component in data["components"].values()),
+            data["summary"]["total_params"],
+        )
+
+    def test_bare_post_quant_conv_is_not_other(self):
+        entries = {entry["name"]: entry for entry in self.data["keys"]}
+
+        self.assertEqual(entries["first_stage_model.post_quant_conv.weight"]["component"], "VAE")
+        self.assertEqual(entries["post_quant_conv.weight"]["component"], "VAE_DUPLICATE")
+        self.assertEqual(
+            sum(1 for entry in self.data["keys"] if entry["component"] == "Other"), 0
+        )
+
+    def test_precision_has_duplicate_component(self):
+        precision = self.data["precision"]
+
+        self.assertEqual(
+            set(precision["components"]), set(self.data["components"])
+        )
+        for name, info in self.data["components"].items():
+            self.assertEqual(
+                sum(entry["params"] for entry in precision["components"][name]),
+                info["params"],
+            )
+
+
+@unittest.skipUnless(_env.has_real_model(SDXL_MODEL), "需要本机真实模型")
+class RealOrdinarySDXLReportTest(unittest.TestCase):
+    """普通 SDXL（无裸副本）：不得出现 VAE_DUPLICATE。"""
+
+    @classmethod
+    def setUpClass(cls):
+        report.clear_cache()
+        cls.data = report.build_report("checkpoints", SDXL_MODEL)
+
+    @classmethod
+    def tearDownClass(cls):
+        report.clear_cache()
+
+    def test_no_duplicate_component(self):
+        data = self.data
+
+        self.assertEqual(data["summary"]["key_count"], 2515)
+        self.assertEqual(data["summary"]["total_params"], 3_468_837_945)
+        self.assertEqual(list(data["components"]), ["UNET", "CLIP", "VAE"])
+        self.assertNotIn("VAE_DUPLICATE", data["components"])
+        self.assertEqual(data["components"]["VAE"]["key_count"], 248)
+        self.assertEqual(data["components"]["VAE"]["params"], 83_653_863)
+        self.assertEqual(
+            sum(component["key_count"] for component in data["components"].values()),
+            data["summary"]["key_count"],
+        )
+        self.assertEqual(
+            sum(component["params"] for component in data["components"].values()),
+            data["summary"]["total_params"],
+        )
 
 
 if __name__ == "__main__":
