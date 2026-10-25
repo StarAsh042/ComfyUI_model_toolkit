@@ -1,4 +1,4 @@
 # torch 由 ComfyUI 自带，插件不声明：
 # 声明会让 ComfyUI Manager 在安装时 pip 解析 torch，可能重装或降级宿主环境。
 safetensors>=0.3.0
-pyyaml>=5.4.0
+aiohttp>=3.9

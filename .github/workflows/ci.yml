@@ -45,6 +45,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt -r tests/requirements-ci.txt
+      - name: Check template index is in sync
+        # YAML 是源数据，运行时只读 index.json；漂移会导致架构识别与模板不一致
+        run: python tools/build_template_index.py --check
       - name: Run Python tests
         run: python -m unittest discover -s tests -v
 
@@ -74,7 +77,8 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install ruff
-        run: pip install ruff
+        # 与 pyproject dev 依赖保持一致，避免规则集随 Ruff 版本漂移
+        run: pip install ruff==0.17.2
       - name: Ruff check
         run: ruff check .
 

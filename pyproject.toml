@@ -1,14 +1,23 @@
+[build-system]
+# 需要 setuptools>=77 才支持 PEP 639 的 license 表达式与 License-File 元数据
+requires = ["setuptools>=77.0.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ComfyUI_model_toolkit"
 description = "ComfyUI model inspector with an interactive architecture report."
 version = "2.0.0"
-license = {file = "LICENSE"}
+license = "GPL-3.0-only"
 requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dynamic = ["dependencies"]
 
 [project.optional-dependencies]
-# CI 只用于静态检查；测试依赖由 requirements.txt 与宿主 ComfyUI 提供
-dev = ["ruff>=0.6"]
+# ruff 与 pyyaml 仅用于开发/测试；运行依赖由 requirements.txt 与宿主 ComfyUI 提供
+dev = ["ruff==0.17.2", "pyyaml>=5.4.0"]
 
 [tool.setuptools]
 # ComfyUI 以「目录即包」加载插件；wheel 只收纳可复用的 Python 包
@@ -19,7 +28,7 @@ dependencies = {file = ["requirements.txt"]}
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py311"
 extend-exclude = ["components", "web"]
 
 [tool.ruff.lint]

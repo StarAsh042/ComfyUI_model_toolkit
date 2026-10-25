@@ -44,6 +44,31 @@
 - Python 单测增至 231 项（新增替换器严格全量、metadata 保留/剔除与
   `save_component` metadata 契约测试，覆盖 `sha2` / `sha-2` / `sha2-256` /
   `shasum` / `blake` 及 `sha` / `shape` / `shard` 反例）。
+- **发布一致性守卫**：`publish.yml` 增加 workflow 级串行
+  （`group=${{ github.workflow }}-${{ github.ref }}`，不取消进行中的发布），
+  仅 `StarAsh042` 仓库的 `main` 分支发布；在版本一致性校验后、发布 action 前
+  只读查询 Comfy Registry 已发布版本，按整数三元组比较，新版本必须严格递增，
+  同版本以 `RIG-A VERSION_UNCHANGED` 阻断。守卫不读 secret、不写仓库、不以
+  Git tag 为基线；先以 `GET /nodes/{node_id}` 校验节点存在，`404` 以
+  `RIG-A BASELINE_UNKNOWN_NODE` 阻断，HTTP 重定向不自动跟随（小写 node id 的
+  `302` 同样按不可达阻断）；确认 `200` 后才读取 `GET /nodes/{node_id}/versions`
+  ——该端点对未知节点也返回 `200` + `[]`，空数组仅在节点已确认存在时视为首发
+  并以 `RIG-A NO_BASELINE_FIRST_PUBLISH` 放行。3xx / 非 200、网络、超时、
+  JSON 错误一律以 `RIG-A REGISTRY_UNREACHABLE` 阻断，非 SemVer 版本同样阻断。
+- **依赖与打包元数据修正**：`requirements.txt` 声明 `aiohttp>=3.9`
+  （`model_toolkit/server.py` 的运行期路由依赖），`pyyaml` 移出运行依赖，
+  改由 `tests/requirements-ci.txt` 与 dev extras 提供；`pyproject.toml` 新增
+  `[build-system]`（`setuptools>=77.0.1`），license 改为 PEP 639 的
+  `GPL-3.0-only`（不使用 `License::` classifier），新增 Python 3.11/3.12
+  classifiers，Ruff 目标版本改为 py311，dev/CI 固定 `ruff==0.17.2`。
+- **模板索引 CI**：`tools/build_template_index.py` 输出改为 ASCII 令牌
+  （`INDEX_SYNC_OK` / `INDEX_MISSING` / `INDEX_OUT_OF_SYNC` /
+  `INDEX_TOOL_ERROR`），修复 cp936/GBK 控制台打印失败；CI 在单元测试前执行
+  `python tools/build_template_index.py --check`，缺 CSafeLoader 时硬失败。
+- 新增 `tests/test_release_integrity.py`；`tests/test_packaging.py` 增加 AST
+  导入闭包、dev/CI Ruff 版本与依赖口径断言。Python 单测增至 278 项
+  （CI 替身环境 16 项因缺少真实模型跳过）；其中发布守卫用 stub `urlopen`
+  执行 workflow 内嵌脚本，覆盖存在性校验、重定向不跟随与 fail-closed 分支。
 
 ## [2.0.0] - 2026-10-25
 

@@ -10,7 +10,7 @@ cd D:\AIGC\ComfyUI\custom_nodes\ComfyUI_model_toolkit
 & "D:\AIGC\ComfyUI\.ext\python.exe" -m unittest discover -s tests -v
 ```
 
-共 141 项；其中 12 项需要本机真实 SD1/SDXL 模型，模型不存在时自动跳过。
+共 278 项；其中 16 项需要本机真实 SD1/SDXL 模型，模型不存在时自动跳过。
 CI（GitHub Actions）没有 ComfyUI 与真实模型，使用
 `tests/ci/folder_paths.py` 最小替身运行纯逻辑测试：
 
@@ -20,9 +20,11 @@ COMFYUI_DIR="$PWD/tests/ci" python -m unittest discover -s tests -v
 
 替身会创建空的 checkpoints / loras / diffusion_models 目录与一个占位
 `.safetensors`，因此目录枚举类测试仍可执行；真实模型用例显示为 skipped。
-Runner 还需安装测试专用依赖 `tests/requirements-ci.txt`（numpy / aiohttp，
-不属于插件运行依赖）；工作流定义见 `.github/workflows/ci.yml`
-（Python + Node + Ruff，聚合 job `ci`）。
+Runner 还需安装 `tests/requirements-ci.txt`（numpy / pyyaml，仅测试与模板工具链使用，
+不属于插件运行依赖）；`aiohttp` 已列入插件运行依赖。工作流定义见
+`.github/workflows/ci.yml`（Python + Node + Ruff，聚合 job `ci`）。
+工作流在跑单元测试前会执行 `python tools/build_template_index.py --check`，
+保证 `index.json` 与 YAML 源数据同步。
 
 ## 前端纯函数测试（Node 24+）
 
@@ -102,6 +104,14 @@ Architecture 标签页的 UNet 结构视图（`web/report/views/unet.js`）与 P
 - `test_packaging.PyprojectTest` 锁定发布元数据：`pyproject.toml` 版本必须与
   `__version__` 一致、依赖动态引用 `requirements.txt`、`[tool.comfy]` 发布信息存在；
   发布前必须同时修改两处版本号。
+- `test_packaging.RuntimeImportClosureTest` 用 AST 扫描 19 个包内 Python 文件，
+  运行期第三方导入必须恰好是 `aiohttp` / `safetensors` / `torch`；前两者必须在
+  `requirements.txt` 声明，`torch` 由宿主提供。`pyyaml` 只允许出现在
+  `tests/requirements-ci.txt` 与 dev 依赖中。
+- `test_release_integrity.py` 静态锁定发布守卫与 CI：workflow 级串行、仅 main 发布、
+  版本守卫位于发布 action 之前且不读 secret、不以 tag 为基线；索引工具在
+  utf-8 / cp936 下均以 `INDEX_SYNC_OK` 开头退出 0，缺文件/漂移/缺 CSafeLoader
+  使用对应 ASCII 令牌。测试不访问网络。
 - 黄金样本基线于 2026-10-22 因 B1/B3/B4/B2 修复重建过；
   2026-10-24 因界面/输出英文化、默认目录改为 `checkpoints` 再次重建；
   2026-10-25（2.0.0）随节点零输出切换为报告 JSON 规范化哈希，旧文本/图像
