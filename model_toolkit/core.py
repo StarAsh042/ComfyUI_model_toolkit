@@ -12,6 +12,10 @@ import torch
 # 与包级 logger 同名，保证日志输出（logger name）不变
 logger = logging.getLogger(__package__.split(".")[0])
 
+# safetensors 文件扩展名。加载/保存/分析统一走这个集合，避免大小写或 .sft
+# 支持不一致导致同一文件被当成 pickle 读取/写出。
+SAFETENSORS_EXTENSIONS = (".safetensors", ".sft")
+
 # safetensors 头部 dtype 字符串 → torch dtype（fp8 只在较新 torch 中存在）
 SAFETENSORS_DTYPES = {
     "F64": torch.float64,
@@ -101,12 +105,26 @@ class ModelUtils:
             return f"{num/1e6:.2f}M"
 
     @staticmethod
+    def is_safetensors_path(model_path):
+        """路径是否使用 safetensors 扩展名（.safetensors/.sft，大小写不敏感）。
+
+        加载、保存、分析与元信息读取都以此判断格式，避免各处扩展名规则漂移。
+        """
+        if not model_path:
+            return False
+        try:
+            suffix = os.path.splitext(os.fspath(model_path))[1]
+        except TypeError:
+            return False
+        return suffix.lower() in SAFETENSORS_EXTENSIONS
+
+    @staticmethod
     def read_safetensors_metadata(model_path):
         """读取 safetensors 头部的 __metadata__（不加载权重）。
 
         非 safetensors 文件返回空 dict，由调用方回退到键扫描。
         """
-        if not model_path or not str(model_path).lower().endswith((".safetensors", ".sft")):
+        if not ModelUtils.is_safetensors_path(model_path):
             return {}
         try:
             with safetensors.safe_open(str(model_path), framework="pt", device="cpu") as f:
@@ -161,7 +179,7 @@ class ModelUtils:
         """
         if not model_path:
             return None
-        if str(model_path).lower().endswith((".safetensors", ".sft")):
+        if cls.is_safetensors_path(model_path):
             return cls.read_safetensors_index(model_path)
         return cls.load_model(model_path)
 
@@ -169,7 +187,7 @@ class ModelUtils:
     def load_model(model_path):
         """加载模型文件"""
         try:
-            if model_path.endswith('.safetensors'):
+            if ModelUtils.is_safetensors_path(model_path):
                 model_data = safetensors.torch.load_file(model_path, device="cpu")
             else:
                 # 显式 weights_only=True：拒绝 pickle 任意对象（torch<2.6 默认 False）
@@ -314,7 +332,7 @@ class ModelUtils:
         try:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-            if output_path.endswith('.safetensors'):
+            if ModelUtils.is_safetensors_path(output_path):
                 safetensors.torch.save_file(component_data, output_path)
             else:
                 torch.save({"state_dict": component_data}, output_path)

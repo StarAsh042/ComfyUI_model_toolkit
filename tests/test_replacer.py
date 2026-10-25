@@ -70,7 +70,7 @@ class ExtractedFolderTest(unittest.TestCase):
         paths, exts = folder_paths.folder_names_and_paths["model_toolkit_extracted"]
 
         self.assertTrue(paths, "提取目录至少要有一个路径")
-        self.assertEqual(set(exts), {".safetensors", ".ckpt", ".pt"})
+        self.assertEqual(set(exts), {".safetensors", ".sft", ".ckpt", ".pt"})
 
 
 class ReplaceFlowTest(unittest.TestCase):

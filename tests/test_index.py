@@ -52,6 +52,22 @@ class HeaderIndexTest(unittest.TestCase):
             self.assertNotIn("__metadata__", index)
             self.assertIn("first_stage_model.decoder.conv_in.weight", index)
 
+    def test_index_supports_sft_and_uppercase_safetensors(self):
+        """分析链路（load_model_index）同样按大小写不敏感扩展名走头部读取。"""
+        state = _tiny_state_dict()
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("tiny.sft", "tiny.SAFETENSORS", "tiny.SFT"):
+                with self.subTest(name=name):
+                    path = os.path.join(tmp, name)
+                    safetensors.torch.save_file(state, path)
+
+                    index = ModelUtils.load_model_index(path)
+
+                    self.assertEqual(set(index), set(state))
+                    for key, tensor in state.items():
+                        self.assertEqual(tuple(index[key].shape), tuple(tensor.shape))
+                        self.assertEqual(index[key].dtype, tensor.dtype)
+
 
 class PrepareReportTest(unittest.TestCase):
     """P4：节点只校验并预热报告缓存，不再输出文字/图片。"""
