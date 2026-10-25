@@ -10,8 +10,8 @@
 """
 import os
 
-# 与节点原有的扩展名规则保持一致：已有模型扩展名不再重复追加
-MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt")
+# 可识别的模型扩展名（比较时统一转小写）：已有扩展名不再重复追加
+MODEL_EXTENSIONS = (".safetensors", ".sft", ".ckpt", ".pt")
 
 
 class UnsafeOutputPathError(ValueError):
@@ -75,7 +75,9 @@ def resolve_output_path(save_dir, output_name, default_name):
 
     output_name 非空时按用户输入严格校验；为空时使用 default_name
     （沿用原默认命名）。扩展名规则与旧实现一致：缺少模型扩展名时补
-    ``.safetensors``。任何越界输入都在调用保存前抛出异常。
+    ``.safetensors``；已有扩展名的判断大小写不敏感，且保留用户输入的
+    原始大小写（``foo.SFT`` 不会变成 ``foo.SFT.safetensors``）。
+    任何越界输入都在调用保存前抛出异常。
     """
     if output_name:
         validate_output_name(output_name)
@@ -84,6 +86,6 @@ def resolve_output_path(save_dir, output_name, default_name):
         _validate_default_name(default_name)
         file_name = default_name
 
-    if not file_name.endswith(MODEL_EXTENSIONS):
+    if not file_name.lower().endswith(MODEL_EXTENSIONS):
         file_name += ".safetensors"
     return _ensure_contained(save_dir, file_name)

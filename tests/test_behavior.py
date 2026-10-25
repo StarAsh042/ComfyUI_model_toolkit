@@ -251,6 +251,86 @@ class LoadSaveTest(unittest.TestCase):
             self.assertEqual(tuple(loaded["a"].shape), (2,))
 
 
+class SafetensorsExtensionTest(unittest.TestCase):
+    """safetensors 扩展名大小写与 .sft 在加载/保存链路上保持一致。"""
+
+    def test_is_safetensors_path_is_case_insensitive(self):
+        for name in (
+            "a.safetensors",
+            "a.SAFETENSORS",
+            "a.SafeTensors",
+            "a.sft",
+            "a.SFT",
+            Path("a.SfT"),
+        ):
+            with self.subTest(name=str(name)):
+                self.assertTrue(ModelUtils.is_safetensors_path(name))
+
+        for name in ("a.ckpt", "a.pt", "a.bin", "a.pth", "a", None, ""):
+            with self.subTest(name=name):
+                self.assertFalse(ModelUtils.is_safetensors_path(name))
+
+    def test_load_model_accepts_sft_and_uppercase_safetensors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in (
+                "model.safetensors",
+                "model.SAFETENSORS",
+                "model.sft",
+                "model.SFT",
+            ):
+                path = Path(tmp) / name
+                safetensors.torch.save_file({"w": torch.ones(2)}, str(path))
+
+                loaded = ModelUtils.load_model(str(path))
+
+                self.assertEqual(sorted(loaded), ["w"])
+                self.assertEqual(tuple(loaded["w"].shape), (2,))
+
+    def test_read_safetensors_metadata_accepts_sft_and_uppercase(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in (
+                "model.safetensors",
+                "model.SAFETENSORS",
+                "model.sft",
+                "model.SFT",
+            ):
+                path = Path(tmp) / name
+                safetensors.torch.save_file(
+                    {"w": torch.ones(2)}, str(path), metadata={"format": "pt", "name": name}
+                )
+
+                metadata = ModelUtils.read_safetensors_metadata(str(path))
+
+                self.assertEqual(metadata.get("format"), "pt", name)
+                self.assertEqual(metadata.get("name"), name)
+
+    def test_save_component_sft_and_uppercase_write_safetensors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("component.sft", "component.SAFETENSORS", "component.SFT"):
+                path = Path(tmp) / name
+
+                self.assertTrue(ModelUtils.save_component({"w": torch.ones(2)}, str(path)))
+
+                self.assertEqual(_safetensors_keys(path), ["w"])
+                self.assertEqual(sorted(safetensors.torch.load_file(str(path))), ["w"])
+                self.assertFalse(
+                    (Path(tmp) / f"{name}.safetensors").exists(),
+                    "保存不得强制追加重复扩展名",
+                )
+
+    def test_save_component_ckpt_still_uses_torch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "component.ckpt"
+
+            self.assertTrue(ModelUtils.save_component({"w": torch.ones(2)}, str(path)))
+
+            payload = torch.load(str(path), map_location="cpu", weights_only=True)
+            self.assertEqual(sorted(payload["state_dict"]), ["w"])
+            with self.assertRaises(safetensors.SafetensorError):
+                safetensors.torch.load_file(str(path))
+            self.assertEqual(sorted(ModelUtils.load_model(str(path))), ["w"])
+
+
 class AnalysisTest(unittest.TestCase):
     def test_analyze_architecture_sd1(self):
         sd = _sd1_like_state_dict()

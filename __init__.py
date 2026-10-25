@@ -37,7 +37,7 @@ if hasattr(folder_paths, 'add_model_folder_path'):
     # 这里显式限定为模型文件，避免模板/杂项文件混进替换器下拉
     folder_paths.folder_names_and_paths["model_toolkit_extracted"] = (
         folder_paths.folder_names_and_paths["model_toolkit_extracted"][0],
-        {".safetensors", ".ckpt", ".pt"},
+        {".safetensors", ".sft", ".ckpt", ".pt"},
     )
 
 # 前端扩展目录（ComfyUI 约定）：模型检查器的「模型目录」联动下拉

@@ -3,7 +3,9 @@
 恶意输入必须在保存前被明确拒绝；合法默认名、合法显式名、扩展名与同名
 覆盖语义保持不变。Windows 盘符 / UNC / 反斜杠规则在本机 Windows 实测。
 """
+import json
 import os
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +15,10 @@ import _env  # noqa: F401  设置 sys.path
 import folder_paths
 import safetensors.torch
 import torch
+from ComfyUI_model_toolkit.model_toolkit.output_paths import (
+    MODEL_EXTENSIONS,
+    resolve_output_path,
+)
 from ComfyUI_model_toolkit.nodes.component_extractor import ComponentExtractor
 from ComfyUI_model_toolkit.nodes.component_replacer import ComponentReplacer
 
@@ -21,6 +27,14 @@ VAE_KEY = "first_stage_model.decoder.conv_in.weight"
 CLIP_KEY = "cond_stage_model.transformer.text_model.encoder.layers.0.mlp.fc1.weight"
 
 NODES = ("extractor", "replacer")
+
+
+def _safetensors_header_keys(path):
+    """只读 safetensors 头部，返回键集合（证明写出的不是 pickle）。"""
+    with open(path, "rb") as f:
+        header_size = struct.unpack("<Q", f.read(8))[0]
+        header = json.loads(f.read(header_size))
+    return {key for key in header if key != "__metadata__"}
 
 
 def _target():
@@ -51,11 +65,15 @@ class OutputNameSafetyTest(unittest.TestCase):
 
         self.baseline_tree = self._tree()
 
-    def _patch_paths(self):
+    def _patch_paths(self, target_path=None, replacement_path=None):
         """把节点用到的目录/文件解析固定到临时目录。"""
         resolved = {
-            "checkpoints": str(self.target_path),
-            "model_toolkit_extracted": str(self.replacement_path),
+            "checkpoints": str(
+                self.target_path if target_path is None else target_path
+            ),
+            "model_toolkit_extracted": str(
+                self.replacement_path if replacement_path is None else replacement_path
+            ),
         }
         return (
             mock.patch.object(
@@ -71,14 +89,24 @@ class OutputNameSafetyTest(unittest.TestCase):
             mock.patch.object(folder_paths, "output_directory", str(self.output_dir)),
         )
 
-    def _run(self, node, output_name, model_name="target.safetensors"):
-        get_full_path, get_folder_paths, output_directory = self._patch_paths()
+    def _run(
+        self,
+        node,
+        output_name,
+        model_name="target.safetensors",
+        replacement_name="vae.safetensors",
+        target_path=None,
+        replacement_path=None,
+    ):
+        get_full_path, get_folder_paths, output_directory = self._patch_paths(
+            target_path, replacement_path
+        )
         with get_full_path, get_folder_paths, output_directory:
             if node == "extractor":
                 text = ComponentExtractor().extract_component(model_name, "VAE", output_name)
             else:
                 text = ComponentReplacer().replace_component(
-                    model_name, "VAE", "vae.safetensors", output_name
+                    model_name, "VAE", replacement_name, output_name
                 )
         return text[0]
 
@@ -189,6 +217,46 @@ class OutputNameSafetyTest(unittest.TestCase):
         self.assertTrue((self.output_dir / "chosen.safetensors").is_file())
         self.assertFalse((self.output_dir / "chosen.safetensors.safetensors").exists())
 
+    def test_sft_end_to_end_uses_safetensors_and_keeps_extension(self):
+        """提取/替换均可用 .sft 输入，并以 .sft / 大写扩展名写出 safetensors。"""
+        target_sft = self.root / "target.sft"
+        replacement_sft = self.root / "vae.sft"
+        safetensors.torch.save_file(_target(), str(target_sft))
+        safetensors.torch.save_file({VAE_KEY: torch.ones(3, 3)}, str(replacement_sft))
+
+        text = self._run(
+            "extractor",
+            "extracted.SFT",
+            model_name="target.sft",
+            target_path=target_sft,
+            replacement_path=replacement_sft,
+        )
+        self.assertTrue(text.startswith("✅ Saved VAE component"), text)
+        extract_path = self.extracted_dir / "extracted.SFT"
+        self.assertTrue(extract_path.is_file())
+        self.assertFalse((self.extracted_dir / "extracted.SFT.safetensors").exists())
+        self.assertEqual(_safetensors_header_keys(extract_path), {VAE_KEY})
+        self.assertEqual(set(safetensors.torch.load_file(str(extract_path))), {VAE_KEY})
+
+        text = self._run(
+            "replacer",
+            "replaced.sft",
+            model_name="target.sft",
+            replacement_name="vae.sft",
+            target_path=target_sft,
+            replacement_path=replacement_sft,
+        )
+        self.assertTrue(text.startswith("✅ Replaced 1/1 VAE keys"), text)
+        replaced_path = self.output_dir / "replaced.sft"
+        self.assertTrue(replaced_path.is_file())
+        self.assertFalse((self.output_dir / "replaced.sft.safetensors").exists())
+        self.assertEqual(
+            _safetensors_header_keys(replaced_path), {UNET_KEY, VAE_KEY, CLIP_KEY}
+        )
+        replaced = safetensors.torch.load_file(str(replaced_path))
+        self.assertTrue(torch.all(replaced[VAE_KEY] == 1))
+        self.assertTrue(torch.all(replaced[UNET_KEY] == 0))
+
     def test_existing_output_file_is_overwritten(self):
         stale = {"stale": torch.ones(1)}
         extract_path = self.extracted_dir / "result.safetensors"
@@ -222,6 +290,53 @@ class OutputNameSafetyTest(unittest.TestCase):
 
         saved = safetensors.torch.load_file(str(outside_file))
         self.assertIn("secret", saved, "目录外文件不得被覆盖")
+
+
+class ResolveOutputPathExtensionTest(unittest.TestCase):
+    """resolve_output_path 的扩展名白名单与大小写规则。"""
+
+    def test_model_extensions_are_exactly_supported_set(self):
+        self.assertEqual(
+            set(MODEL_EXTENSIONS), {".safetensors", ".sft", ".ckpt", ".pt"}
+        )
+
+    def test_supported_extensions_keep_user_case_without_duplication(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for extension in MODEL_EXTENSIONS:
+                for spelling in (extension, extension.upper()):
+                    name = f"foo{spelling}"
+                    with self.subTest(name=name):
+                        resolved = resolve_output_path(tmp, name, "default")
+
+                        self.assertEqual(resolved, os.path.join(tmp, name))
+                        self.assertFalse(
+                            resolved.lower().endswith(".safetensors.safetensors")
+                        )
+
+            mixed = "foo.SafeTensors"
+            self.assertEqual(
+                resolve_output_path(tmp, mixed, "default"), os.path.join(tmp, mixed)
+            )
+
+    def test_missing_or_unsupported_extension_gets_default_safetensors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, expected in {
+                "foo": "foo.safetensors",
+                "foo.pth": "foo.pth.safetensors",
+                "foo.bin": "foo.bin.safetensors",
+            }.items():
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        resolve_output_path(tmp, name, "default"),
+                        os.path.join(tmp, expected),
+                    )
+
+    def test_empty_output_name_keeps_default_naming(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                resolve_output_path(tmp, "", "target_vae"),
+                os.path.join(tmp, "target_vae.safetensors"),
+            )
 
 
 if __name__ == "__main__":
