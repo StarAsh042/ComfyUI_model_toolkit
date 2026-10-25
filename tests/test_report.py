@@ -91,10 +91,12 @@ class SyntheticReportTest(unittest.TestCase):
         self.assertEqual(data["summary"]["model_dir"], "checkpoints")
         self.assertEqual(data["summary"]["key_count"], len(self.state))
         self.assertEqual(data["summary"]["total_params"], total)
-        self.assertEqual(data["summary"]["architecture"], "SD1.x")
+        # 12 键的桩模型远低于识别门槛（MIN_REQUIRED_HITS=32，召回需 ≥95%），
+        # 按契约不得判为模板架构：类型回退到家族识别，template 为空。
+        self.assertEqual(data["summary"]["architecture"], "SD family")
         self.assertEqual(data["summary"]["primary_precision"], "FP16 (Half precision)")
-        self.assertEqual(data["architecture"]["type"], "SD1.x")
-        self.assertEqual(data["architecture"]["template"], "sd1-ldm")
+        self.assertEqual(data["architecture"]["type"], "SD family")
+        self.assertIsNone(data["architecture"]["template"])
 
         self.assertEqual(list(data["components"]), ["UNET", "CLIP", "VAE"])
         self.assertEqual(

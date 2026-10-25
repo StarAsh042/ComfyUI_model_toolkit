@@ -208,7 +208,13 @@ structure/
 
 选择规则：
 
-1. 架构模板命中 SD1/SDXL（覆盖率 ≥95%）且存在 `input_blocks` / `down_blocks` → `unet` 提取器；
+1. 架构模板命中 SD1/SDXL 且存在 `input_blocks` / `down_blocks` → `unet` 提取器。
+   模板命中需同时满足：必需模板键召回 ≥95%、至少 32 个必需键命中、未忽略的额外键 ≤5%。
+   `model_ema`、精确训练/调度状态、baked embedding/LoRA 与模板等价的裸 VAE 副本
+   有明确忽略规则，其他未知键仍计入额外键。报告字段 `template_coverage` 名称不变，
+   数值表示必需模板键召回率。未命中时回退到架构家族/前缀规则；只含少量模板键的
+   提取产物、UNet-only 普通 SD1 裁切包或缺少 >5% 必需键的裁切包可能不再匹配完整模板，
+   专用 `sdxl-diffusers_unet_only` 模板仍支持。
 2. Flux/SD3 等 MMDiT → v1 返回 `generic`，页面显示「DiT 特化视图规划中」；
 3. 其余 → `generic`。
 

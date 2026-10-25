@@ -27,7 +27,8 @@
 | `sd1-supermerger_blocks.yaml` | SD1.x 块定义 | BLOCKS 26 | ❌ | — |
 | `sdxl-supermerger_blocks.yaml` | SDXL 块定义 | BLOCKS 21 | ❌ | — |
 
-\* `EMA` 段数据损坏（见下），不计入覆盖率。
+\* `EMA` 段数据损坏（见下），不参与模板召回（必需键召回）；模型里的 `model_ema.*`
+额外段由前缀规则忽略，不计入未忽略额外键。
 「参与自动识别」= 模板只含 `UNET/VAE/CLIP/EMA` 这些本项目节点能表达的组件。
 Flux/SD3 的 T5XXL、supermerger 的 BLOCKS 无法映射，因此**数据保留但不参与识别**——
 等节点支持 T5 或新增组件类型后，去掉 `REPRESENTABLE_COMPONENTS` 的限制即可启用。
@@ -62,7 +63,8 @@ python tools/build_template_index.py --check   # 校验是否同步
 
 上游 `ema` 段的键名**丢了所有点**，例如 `model_ema.diffusion_modelinput_blocks00bias`。
 对本机 SD1 模型 1133 键中仅 `model_ema.decay` / `model_ema.num_updates` 2 个命中。
-因此本项目 **不把 ema 段用于匹配**，EMA 仍由 `model_ema.` 前缀规则识别。
+因此本项目 **不把 ema 段用于必需键召回**，EMA 仍由 `model_ema.` 前缀规则识别；
+这些 `model_ema.*` 键同时被 `IGNORED_PREFIXES` 忽略，不计入未忽略额外键。
 升级上游数据前不要改动这一约定。
 
 ## 校验
@@ -71,14 +73,21 @@ python tools/build_template_index.py --check   # 校验是否同步
 python tools/validate_templates.py <模型路径> [...]
 ```
 
-只读 safetensors 头部，打印覆盖率与各组件命中数。本机实测：
+只读 safetensors 头部，打印模板召回、识别成功时的额外键比例与各组件命中数。
 
-| 模型 | 键数 | 判定 | 覆盖率 |
-|---|---:|---|---:|
-| SD1.5 fp16（Alpha_Anime_2.5D） | 1133 | `sd1-ldm` | 99.8% |
-| SDXL（NoobXL_100） | 2514 | `sdxl-sgm` | 100.0% |
+识别口径（`templates.detect`）：模板必需键召回 ≥ 95%、命中必需键 ≥ 32、
+未忽略额外键 ≤ 5%，合格者取召回最高者。模板召回 = |R ∩ M| / |R|（R 为模板非 EMA
+必需键，M 为模型键）；额外键比例 = |S − T| / |S|（S 为模型键去掉明确忽略项，
+T 为模板可信键）。本机实测：
 
-SD1 的 UNET/VAE/CLIP 分组为 686 / 248 / 197，与迁移前的前缀分类**逐键一致**；
+| 模型 | 键数 | 判定 | 模板召回 | 额外键 |
+|---|---:|---|---:|---:|
+| SD1.5 fp16（Alpha_Anime_2.5D） | 1133 | `sd1-ldm` | 100.0% | 0.0% |
+| SDXL（NoobXL_100） | 2514 | `sdxl-sgm` | 100.0% | 0.0% |
+
+本机 checkpoints 下 47 个模型全部识别为对应模板，模板召回均为 100%、额外键均为 0%。
+SD1 的 UNET/VAE/CLIP 分组为 686 / 248 / 197（模板必需键命中 686 / 248 / 196，
+CLIP 另命中 1 个 optional 键），与迁移前的前缀分类**逐键一致**；
 SDXL 2514 键同样逐键一致（差异 0 条）。
 
 ## 覆盖边界（为什么没有"市面全部架构"）
