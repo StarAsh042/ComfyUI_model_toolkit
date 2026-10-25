@@ -155,11 +155,19 @@ Flux/SD3 模板含 T5XXL、supermerger 模板只有 BLOCKS，超出当前节点�
 
 ## 依赖要求
 
-该插件依赖以下Python库（torch 由 ComfyUI 自带，插件不声明）：
+`requirements.txt` 内容如下（本段与文件逐字一致）：
+
 ```
+# torch 由 ComfyUI 自带，插件不声明：
+# 声明会让 ComfyUI Manager 在安装时 pip 解析 torch，可能重装或降级宿主环境。
 safetensors>=0.3.0
-pyyaml>=5.4.0
+aiohttp>=3.9
 ```
+
+- `safetensors`：只读模型头部（键名/形状/精度），并用于组件保存。
+- `aiohttp`：**运行期依赖**，`model_toolkit/server.py` 用它注册 ComfyUI 的 HTTP 路由。
+- `torch`：由 ComfyUI 宿主提供，插件不声明，避免 Manager 安装时重装/降级宿主 torch。
+- `pyyaml`：只用于开发/CI 编译模板索引与测试解析，不是运行依赖。
 
 2.0.0 起不再依赖 `numpy` / `matplotlib` / `Pillow`：图表与结构图由浏览器渲染。
 
@@ -174,6 +182,9 @@ node --test tests/frontend/*.test.mjs
 
 # 静态检查
 ruff check .
+
+# 模板索引与 YAML 同步校验（CI 同样执行）
+python tools/build_template_index.py --check
 ```
 
 - **CI**（`.github/workflows/ci.yml`）：PR 与推送到 `main` / `dev` 时运行
@@ -183,6 +194,9 @@ ruff check .
 - **自动发布**（`.github/workflows/publish.yml`）：`pyproject.toml` 变更并推送到
   `main`（或手动触发）时发布到 Comfy Registry。需在仓库
   `Settings → Secrets and variables → Actions` 配置 `REGISTRY_ACCESS_TOKEN`。
+- **发布基线守卫**：发布前只读查询 Comfy Registry 已发布版本，要求当前版本高于
+  已发布最高版本；`2.0.0` 已发布后再次发布同一版本会以 `RIG-A VERSION_UNCHANGED`
+  阻断。守卫不读 secret，也不以 Git tag 为基线。
 - **版本一致性**：发布前同时更新 `pyproject.toml` 与 `__init__.py` 的
   `__version__`；`tests/test_packaging.py` 与发布工作流都会校验两者一致。
 - 建议分支保护只要求聚合检查 `ci`，以后增删矩阵项无需改保护配置。
