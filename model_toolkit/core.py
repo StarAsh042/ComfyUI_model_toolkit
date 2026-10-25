@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from collections import defaultdict
+from collections.abc import Mapping
 
 import safetensors.torch
 import torch
@@ -83,6 +84,14 @@ class ModelUtils:
         'SD2.x': 'v_pred'
     }
 
+    # 替换输出不继承来源文件的校验信息。归一化键名（小写、去掉 - _ .）后
+    # 包含这些子串即剔除；刻意不包含裸 "sha"，避免误伤 "shape"。
+    REPLACEMENT_METADATA_DROP_TOKENS = (
+        'hash', 'checksum', 'digest',
+        'sha1', 'sha2', 'sha224', 'sha256', 'sha384', 'sha512', 'sha3',
+        'shasum', 'md5', 'crc', 'blake', 'blake2', 'blake3',
+    )
+
     @staticmethod
     def format_size(size_in_bytes):
         """格式化文件大小"""
@@ -132,6 +141,34 @@ class ModelUtils:
         except Exception as e:
             logger.error(f"Failed to read model metadata: {str(e)}")
             return {}
+
+    @classmethod
+    def filter_replacement_metadata(cls, metadata):
+        """过滤替换器要写出的 metadata，只按键名判定，返回新 dict。
+
+        - ``None`` → ``{}``；
+        - 非 Mapping，或存在非 str 键/值 → ``TypeError``；
+        - 键名转小写并去掉 ``-`` / ``_`` / ``.`` 后，包含
+          :attr:`REPLACEMENT_METADATA_DROP_TOKENS` 任一项即剔除；
+        - 值不参与判断，输入不被修改，结果再次过滤不变。
+        """
+        if metadata is None:
+            return {}
+        if not isinstance(metadata, Mapping):
+            raise TypeError("metadata must be a mapping of str to str or None")
+
+        filtered = {}
+        for key, value in metadata.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise TypeError("metadata keys and values must be strings")
+            normalized = key.lower().replace('-', '').replace('_', '').replace('.', '')
+            if any(
+                token in normalized
+                for token in cls.REPLACEMENT_METADATA_DROP_TOKENS
+            ):
+                continue
+            filtered[key] = value
+        return filtered
 
     @staticmethod
     def model_fingerprint(model_path):
@@ -327,13 +364,39 @@ class ModelUtils:
         return "SD1.x"
 
     @staticmethod
-    def save_component(component_data, output_path):
-        """保存模型组件"""
+    def save_component(component_data, output_path, metadata=None):
+        """保存模型组件。
+
+        ``metadata`` 仅对 safetensors 生效：``None`` / ``{}`` 不写
+        ``__metadata__``；非空 ``Mapping[str, str]`` 原样交给 ``save_file``。
+        ckpt/pt 接受但忽略合法 metadata。非法 metadata 在创建目录/文件前
+        返回 ``False``，不会静默丢弃 metadata 后降级保存。
+        """
         try:
+            is_safetensors = ModelUtils.is_safetensors_path(output_path)
+            if metadata is not None:
+                if not isinstance(metadata, Mapping):
+                    logger.error(
+                        "Failed to save component: metadata must be a mapping of str to str"
+                    )
+                    return False
+                for key, value in metadata.items():
+                    if not isinstance(key, str) or not isinstance(value, str):
+                        logger.error(
+                            "Failed to save component: metadata keys and values must be strings"
+                        )
+                        return False
+                if is_safetensors:
+                    if not metadata:
+                        metadata = None
+                    elif not isinstance(metadata, dict):
+                        # safetensors 的 Python 绑定只接受 dict；保留同样的键值内容
+                        metadata = dict(metadata)
+
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-            if ModelUtils.is_safetensors_path(output_path):
-                safetensors.torch.save_file(component_data, output_path)
+            if is_safetensors:
+                safetensors.torch.save_file(component_data, output_path, metadata=metadata)
             else:
                 torch.save({"state_dict": component_data}, output_path)
             return True
@@ -348,17 +411,25 @@ class ModelUtils:
         修复 B7/B8：component 参数决定可替换的键集合，
         replacement 中不属于该组件、或形状不匹配的键一律跳过。
 
+        目标组件的每个键恰好归入 replaced / shape_mismatch / uncovered 之一，
+        因此三者之和等于 target_keys。missing 只统计替换源里不属于目标组件的键；
+        ``target_keys == 0`` 时 replaced / shape_mismatch / uncovered 均为 0，
+        missing 为替换源键数。
+
         Returns:
             dict: replaced（写入键数）/ missing（非本组件键数）/
-                  shape_mismatch（形状不匹配键数）/ target_keys（目标组件键数）
+                  shape_mismatch（形状不匹配键数）/ uncovered（替换源缺少的目标键数）/
+                  target_keys（目标组件键数）
         """
         target_keys = set(cls.group_model_keys(target_data).get(component, []))
         replaced = missing = shape_mismatch = 0
+        covered = set()
 
         for key, value in replacement_data.items():
             if key not in target_keys:
                 missing += 1
                 continue
+            covered.add(key)
             target_value = target_data.get(key)
             if target_value is None or tuple(target_value.shape) != tuple(value.shape):
                 shape_mismatch += 1
@@ -370,6 +441,7 @@ class ModelUtils:
             "replaced": replaced,
             "missing": missing,
             "shape_mismatch": shape_mismatch,
+            "uncovered": len(target_keys - covered),
             "target_keys": len(target_keys),
         }
 

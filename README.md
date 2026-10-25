@@ -71,6 +71,8 @@
   - `output_name`：输出文件名（可选）
 - 输出：
   - `Extraction Result`：操作结果信息（含完整保存路径）
+- 说明：提取产物只包含组件张量，不复制源模型 safetensors 的 `__metadata__`；
+  输出文件不会带 metadata 头。
 
 ### 🔄 Component Replacer
 
@@ -82,9 +84,22 @@
   - `replacement_name`：从 `models/model_toolkit_extracted/` 选择替换文件（即组件提取器的产物）
   - `output_name`：输出文件名（可选）
 - 输出：
-  - `Replacement Result`：操作结果信息（替换 / 跳过键数）
+  - `Replacement Result`：操作结果信息（替换 / 忽略键数）
 - 说明：
-  - 只替换属于所选 `component`、且键名与形状都匹配的键；其它组件的键不受影响
+  - **严格全量替换**：只有替换文件覆盖目标组件的全部键、且每个键形状一致时才保存。
+    任一形状不匹配或目标键缺失都会在写文件前拒绝，不创建/覆盖输出文件或保存目录；
+    错误信息使用固定模板并包含 `replaced/target_keys`、shape mismatch、uncovered 与
+    missing 计数
+  - 只替换属于所选 `component` 的键；替换文件里其它组件的额外键会被忽略并计数，
+    不写入输出，也不影响目标模型的其它组件
+  - 输出 metadata 只继承**目标模型** safetensors 头部的 `__metadata__`。键名转小写并
+    去掉 `-`、`_`、`.` 后，只要包含以下任一子串（子串匹配，不是全匹配或通配符）即
+    剔除：`hash`、`checksum`、`digest`、`sha1`、`sha2`、`sha224`、`sha256`、
+    `sha384`、`sha512`、`sha3`、`shasum`、`md5`、`crc`、`blake`、`blake2`、
+    `blake3`。例如 `sha2`、`sha-2`、`sha2-256`、`shasum`、`blake` 都会被剔除；
+    这里刻意不使用裸 `sha` 作为 token，因此 `sha`、`shape`、`shard` 等安全键会保留，
+    值不参与判断。替换源的 metadata 不复制，旧输出文件的 metadata 也不合并；
+    目标无 metadata 或为 ckpt/pt 时输出不写 metadata 头
   - 替换源目录里也可以直接放完整 checkpoint，此时只会取其中的目标组件
 
 ## 支持的架构
@@ -220,9 +235,9 @@ ruff check .
    - 添加 "🔄 Component Replacer" 节点
    - 选择目标模型文件
    - 选择要替换的组件类型
-   - 选择用于替换的组件文件
+   - 选择用于替换的组件文件（必须覆盖目标组件的全部键）
    - 设置输出文件名（可选）
-   - 运行后会生成新的模型文件
+   - 运行后会生成新的模型文件；不完整替换会被拒绝且不写盘
 
 ## 升级到 2.0.0
 
@@ -242,8 +257,9 @@ ruff check .
 ## 注意事项
 
 - 支持`.safetensors`和`.ckpt`格式的模型文件
-- 替换组件时会自动验证兼容性
-- 建议使用`.safetensors`格式保存输出文件
+- 替换组件要求目标组件键 100% 覆盖且形状一致；不完整替换会在写盘前被拒绝，
+  不再生成部分替换的模型
+- 建议使用`.safetensors`格式保存输出文件；只有 safetensors 目标会保留 metadata
 - 处理大型模型文件时需要足够的内存
 - 所有操作都是只读的，不会修改原始文件
 - 报告页需要由 ComfyUI 提供路由与静态资源；节点按钮会先重建报告再打开页面

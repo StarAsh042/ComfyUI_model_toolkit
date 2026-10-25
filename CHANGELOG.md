@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### 破坏性变更
+
+- **组件替换器默认严格全量替换**：只有目标组件存在（`target_keys > 0`）且
+  `replaced == target_keys` 时才写出结果。任何形状不匹配或替换源缺少目标键都会在
+  `save_component` 之前拒绝，不创建/覆盖输出文件或保存目录；错误信息统一为
+  `❌ Incomplete ...; output not written`。此前允许部分替换并保存，属于行为变更。
+- **替换输出不再复制替换源 metadata**：仅继承目标模型 safetensors 头部的
+  `__metadata__`，并按键名剔除校验类标签（归一化大小写与 `-`/`_`/`.` 后子串匹配
+  `hash`、`checksum`、`digest`、`sha1`、`sha2`、`sha224`、`sha256`、`sha384`、
+  `sha512`、`sha3`、`shasum`、`md5`、`crc`、`blake`、`blake2`、`blake3`）；
+  目标无 metadata 或为 ckpt/pt 时输出不写 metadata 头。组件提取器产物同样不复制
+  源 metadata。
+
+### 修复
+
+- `ModelUtils.replace_component_keys` 新增 `uncovered` 统计：目标组件的每个键
+  恰好归入 `replaced` / `shape_mismatch` / `uncovered`，三者之和等于
+  `target_keys`；`missing` 只表示替换源中不属于目标组件的键。
+- `ModelUtils.save_component` 新增可选 `metadata` 参数：None/{} 不写
+  `__metadata__`，非空 `Mapping[str, str]` 原样写出，非法 metadata 在创建
+  目录/文件前返回 False；ckpt/pt 接受但忽略合法 metadata。
+- 新增 `ModelUtils.filter_replacement_metadata`：只按键名（归一化大小写与
+  `-`/`_`/`.` 分隔符）剔除校验类标签，值不参与判断，返回新 dict；剔除 token 为
+  `hash`、`checksum`、`digest`、`sha1`、`sha2`、`sha224`、`sha256`、`sha384`、
+  `sha512`、`sha3`、`shasum`、`md5`、`crc`、`blake`、`blake2`、`blake3`；刻意
+  不含裸 `sha`，因此 `sha` / `shape` / `shard` 保留。
+
 ### 工程
 
 - 新增 GitHub Actions CI（`.github/workflows/ci.yml`）：Python 3.11/3.12 +
@@ -14,7 +41,9 @@
 - 新增 `tests/ci/folder_paths.py` 替身：无 ComfyUI/真实模型的 CI Runner 可运行
   纯逻辑测试；真实模型用例在模型缺失时自动跳过（本机仍执行）。
 - Ruff 清理：空白字符、import 排序与少量未使用变量/导入，无行为变化。
-- Python 单测增至 141 项（新增 pyproject 发布元数据校验）。
+- Python 单测增至 231 项（新增替换器严格全量、metadata 保留/剔除与
+  `save_component` metadata 契约测试，覆盖 `sha2` / `sha-2` / `sha2-256` /
+  `shasum` / `blake` 及 `sha` / `shape` / `shard` 反例）。
 
 ## [2.0.0] - 2026-10-25
 
