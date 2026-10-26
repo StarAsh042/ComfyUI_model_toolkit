@@ -132,6 +132,23 @@ export function isAttentionKey(name) {
     return ATTENTION_MARKERS.some((marker) => text.includes(marker));
 }
 
+export function normalizePrefix(prefix) {
+    const text = String(prefix || "");
+    if (!text) return "";
+    return text.endsWith(".") ? text : `${text}.`;
+}
+
+export function keysUnderPrefixes(keys, prefixes) {
+    const normalized = (Array.isArray(prefixes) ? prefixes : [])
+        .map(normalizePrefix)
+        .filter(Boolean);
+    if (!normalized.length) return [];
+    return (Array.isArray(keys) ? keys : []).filter((key) => {
+        const name = String(key?.name || "");
+        return normalized.some((prefix) => name.startsWith(prefix));
+    });
+}
+
 export function dtypesOf(keys) {
     return [...new Set((keys || []).map((key) => key.dtype).filter(Boolean))].sort();
 }
@@ -152,21 +169,105 @@ export function filterKeys(keys, filters = {}) {
     });
 }
 
+/**
+ * 名称排序快路径：把 lower-case ASCII 键名编码成与
+ * Intl.Collator("en", { numeric: true }) 等序的字符串。
+ * 数字段编码为 "/" + 长度字母 + 去前导零的数字；"_" 映射为 ","，
+ * 使标点排在数字前；字母保持原样。无法安全编码时返回 null，
+ * 调用方回退到 Collator，排序语义不变。
+ */
+function encodeNameKey(name) {
+    let key = "";
+    let start = 0;
+    for (let i = 0; i < name.length; i += 1) {
+        const code = name.charCodeAt(i);
+        if (code >= 48 && code <= 57) {
+            if (i > start) key += name.slice(start, i);
+            let end = i + 1;
+            while (end < name.length) {
+                const next = name.charCodeAt(end);
+                if (next < 48 || next > 57) break;
+                end += 1;
+            }
+            let first = i;
+            while (first < end && name.charCodeAt(first) === 48) first += 1;
+            const length = end - first;
+            if (length > 9) return null;
+            key += `/${String.fromCharCode(97 + length)}`;
+            if (length) key += name.slice(first, end);
+            i = end - 1;
+            start = end;
+        } else if (code !== 95 && code !== 46 && (code < 97 || code > 122)) {
+            return null;
+        }
+    }
+    if (start < name.length) key += name.slice(start);
+    if (key.includes("_")) key = key.replace(/_/g, ",");
+    return key;
+}
+
+function sortNamesFast(items, descending) {
+    const count = items.length;
+    if (!count) return [];
+    const width = String(count - 1).length;
+    const ordered = new Array(count);
+    for (let index = 0; index < count; index += 1) {
+        const key = encodeNameKey(String(items[index].name));
+        if (key === null) return null;
+        const tieBreak = descending ? count - 1 - index : index;
+        ordered[index] = `${key}\u0000${String(tieBreak).padStart(width, "0")}`;
+    }
+    ordered.sort();
+    const rows = new Array(count);
+    if (descending) {
+        for (let index = count - 1, out = 0; index >= 0; index -= 1) {
+            const tieBreak = Number(ordered[index].slice(-width));
+            rows[out] = items[count - 1 - tieBreak];
+            out += 1;
+        }
+        return rows;
+    }
+    for (let index = 0; index < count; index += 1) {
+        rows[index] = items[Number(ordered[index].slice(-width))];
+    }
+    return rows;
+}
+
+function compareNameEntries(a, b) {
+    if (a.key !== null && b.key !== null) {
+        return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+    }
+    return NAME_COLLATOR.compare(a.name, b.name);
+}
+
 export function sortKeys(keys, mode = "name") {
     const items = [...(keys || [])];
-    const byName = (a, b) => NAME_COLLATOR.compare(String(a.name), String(b.name));
-    const byParams = (a, b) => (Number(a.params) || 0) - (Number(b.params) || 0);
-
-    switch (mode) {
-        case "name-desc":
-            return items.sort((a, b) => byName(b, a));
-        case "params":
-            return items.sort((a, b) => byParams(a, b) || byName(a, b));
-        case "params-desc":
-            return items.sort((a, b) => byParams(b, a) || byName(a, b));
-        default:
-            return items.sort(byName);
+    const normalizedMode = mode || "name";
+    if (normalizedMode === "name" || normalizedMode === "name-desc") {
+        const sorted = sortNamesFast(items, normalizedMode === "name-desc");
+        if (sorted) return sorted;
     }
+
+    const entries = items.map((item) => {
+        const name = String(item.name);
+        return { item, name, key: encodeNameKey(name) };
+    });
+    const byParams = (a, b) => (Number(a.item.params) || 0) - (Number(b.item.params) || 0);
+
+    switch (normalizedMode) {
+        case "name-desc":
+            entries.sort((a, b) => compareNameEntries(b, a));
+            break;
+        case "params":
+            entries.sort((a, b) => byParams(a, b) || compareNameEntries(a, b));
+            break;
+        case "params-desc":
+            entries.sort((a, b) => byParams(b, a) || compareNameEntries(a, b));
+            break;
+        default:
+            entries.sort(compareNameEntries);
+    }
+    return entries.map((entry) => entry.item);
 }
 
 export function paginate(items, page, pageSize) {
@@ -183,6 +284,79 @@ export function paginate(items, page, pageSize) {
         total,
         start,
         end,
+    };
+}
+
+function countKeys(keys) {
+    return (Array.isArray(keys) ? keys : []).filter(
+        (key) => key && typeof key === "object"
+    );
+}
+
+function keyViewCount(view) {
+    const value = Number(view?.viewCount);
+    if (Number.isFinite(value)) return Math.max(0, Math.floor(value));
+    return Array.isArray(view?.rows) ? view.rows.length : 0;
+}
+
+function hasActiveFilters(filters) {
+    return Boolean(
+        String(filters.query || "").trim() ||
+            (filters.component && filters.component !== "all") ||
+            (filters.dtype && filters.dtype !== "all") ||
+            filters.attentionOnly
+    );
+}
+
+export function resolveKeyView(keys, filters, prefixes) {
+    const allKeys = countKeys(keys);
+    const activeFilters = filters && typeof filters === "object" ? filters : {};
+    const normalizedPrefixes = (Array.isArray(prefixes) ? prefixes : [])
+        .map(normalizePrefix)
+        .filter(Boolean);
+    const prefixActive = normalizedPrefixes.length > 0;
+
+    let rows = hasActiveFilters(activeFilters)
+        ? filterKeys(allKeys, activeFilters)
+        : allKeys;
+    if (prefixActive) rows = keysUnderPrefixes(rows, normalizedPrefixes);
+    rows = sortKeys(rows, activeFilters.sort);
+
+    const viewCount = rows.length;
+    const totalKeys = allKeys.length;
+    return {
+        rows,
+        viewCount,
+        totalKeys,
+        prefixActive,
+        narrowed: viewCount < totalKeys,
+    };
+}
+
+export function formatKeysStatus(view, page) {
+    const totalKeys = Math.max(0, Math.floor(Number(view?.totalKeys) || 0));
+    const viewCount = Math.max(0, Math.min(totalKeys, keyViewCount(view)));
+    if (!totalKeys) return "No key list";
+    if (!viewCount) return `Showing 0 of ${formatCount(totalKeys)} keys`;
+
+    const rawStart = Math.floor(Number(page?.start) || 0);
+    const rawEnd = Math.floor(Number(page?.end) || 0);
+    const start = Math.max(0, Math.min(viewCount - 1, rawStart));
+    const end = Math.min(viewCount, Math.max(start + 1, rawEnd || viewCount));
+    const range = `Showing ${formatCount(start + 1)}\u2013${formatCount(end)}`;
+    return viewCount < totalKeys
+        ? `${range} of ${formatCount(viewCount)} of ${formatCount(totalKeys)} keys`
+        : `${range} of ${formatCount(totalKeys)} keys`;
+}
+
+export function csvMenuLabels(view) {
+    const totalKeys = Math.max(0, Math.floor(Number(view?.totalKeys) || 0));
+    const viewCount = Math.max(0, Math.min(totalKeys, keyViewCount(view)));
+    return {
+        currentView: `Export keys CSV \u00b7 current view (${formatCount(
+            viewCount
+        )} of ${formatCount(totalKeys)})`,
+        all: `Export keys CSV \u00b7 all keys (${formatCount(totalKeys)})`,
     };
 }
 
@@ -268,6 +442,63 @@ export function keysToCsv(keys) {
         ]);
     }
     return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+}
+
+const MAX_FILENAME_STEM_LENGTH = 80;
+
+const CSV_EXPORT_NOTICES = {
+    NO_REPORT: "No report is loaded.",
+    EMPTY_VIEW: "No keys match the current filters.",
+    NO_KEY_LIST: "This report does not include a key list.",
+};
+
+export function csvExportFileName(fileName, scope) {
+    return safeFilename(fileName, scope === "all" ? "all-keys.csv" : "keys.csv");
+}
+
+function csvExportFailure(code) {
+    return {
+        ok: false,
+        code,
+        rows: [],
+        csv: "",
+        fileName: "",
+        recordCount: 0,
+        notice: CSV_EXPORT_NOTICES[code],
+    };
+}
+
+export function buildCsvExport({ report, view, scope, keys, filters } = {}) {
+    if (!report || !report.summary) return csvExportFailure("NO_REPORT");
+
+    const allKeys = countKeys(keys);
+    if (!allKeys.length) return csvExportFailure("NO_KEY_LIST");
+
+    const activeFilters = filters && typeof filters === "object" ? filters : {};
+    const normalizedScope = scope === "all" ? "all" : "view";
+    let rows;
+    if (normalizedScope === "all") {
+        rows = sortKeys(allKeys, activeFilters.sort);
+    } else {
+        if (!view || !Array.isArray(view.rows) || !view.rows.length) {
+            return csvExportFailure("EMPTY_VIEW");
+        }
+        rows = view.rows;
+    }
+
+    const totalKeys = allKeys.length;
+    return {
+        ok: true,
+        code: "OK",
+        rows,
+        csv: keysToCsv(rows),
+        fileName: csvExportFileName(report.summary.file_name, normalizedScope),
+        recordCount: rows.length,
+        notice:
+            normalizedScope === "view" && rows.length < totalKeys
+                ? `Exported ${formatCount(rows.length)} of ${formatCount(totalKeys)} keys`
+                : `Exported ${formatCount(rows.length)} keys`,
+    };
 }
 
 export function escapeMarkdownCell(value) {
@@ -481,5 +712,6 @@ export function safeFilename(fileName, extension) {
         .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
         .replace(/[. ]+$/g, "")
         .trim();
-    return `${stem || "model"}.${extension}`;
+    const truncatedStem = (stem || "model").slice(0, MAX_FILENAME_STEM_LENGTH);
+    return `${truncatedStem}.${extension}`;
 }

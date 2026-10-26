@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### 行为变更
+
+- **报告页 CSV 导出默认当前视图**：`Export keys CSV · current view` 导出搜索、组件、
+  dtype、attention 与块前缀筛选后的全部行（跨分页），行序与表格当前排序一致；
+  新增 `Export keys CSV · all keys` 承接全量键名，仅按当前排序。空视图返回
+  `EMPTY_VIEW` 且不产生只有表头的 CSV；无键名清单时两个 CSV 禁用，JSON 与
+  Markdown 仍可用。文件名分别为 `<stem>.keys.csv` 与 `<stem>.all-keys.csv`，
+  stem 截断到 80 字符。
+- **报告页 Markdown 保持摘要**：不包含键名章节；1.x `Advanced` 报告中的全量
+  键名清单改由 `Export keys CSV · all keys` 提供。
+- **键名状态与菜单统一**：表格、状态条、CSV 菜单和导出共用
+  `resolveKeyView(keys, filters, prefixes)`；状态精确显示 `No key list`、
+  `Showing 0 of M keys`、`Showing start–end of N of M keys` 或
+  `Showing start–end of M keys`，千分位与 U+2013；翻页不再重新过滤或排序。
+
 ### 破坏性变更
 
 - **组件替换器默认严格全量替换**：只有目标组件存在（`target_keys > 0`）且
@@ -69,6 +84,10 @@
   导入闭包、dev/CI Ruff 版本与依赖口径断言。Python 单测增至 278 项
   （CI 替身环境 16 项因缺少真实模型跳过）；其中发布守卫用 stub `urlopen`
   执行 workflow 内嵌脚本，覆盖存在性校验、重定向不跟随与 fail-closed 分支。
+- Node 前端测试增至 63 项：报告页纯函数 26 项（新增 `resolveKeyView` 跨分页/
+  空前缀/非法输入、CSV 文件名与失败计划、状态/菜单精确文案、公式注入与
+  100k 键/20k 行性能）、新增报告文档契约 4 项；控件迁移 12、报告 URL 7、
+  UNet 视图 10、原理图联动 4。
 
 ## [2.0.0] - 2026-10-25
 

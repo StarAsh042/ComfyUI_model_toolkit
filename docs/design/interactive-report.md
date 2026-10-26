@@ -1,6 +1,6 @@
 # 交互式报告与架构特化视图 — 实施计划（v2）
 
-> 状态：**已批准（2026-10-24）**；P0 代码完成（含默认目录/英文调整）；P1 数据层完成；P2 服务层、报告页骨架与节点按钮完成（2026-10-24，按钮先重建报告再打开；待界面验收）；P3 完成（2026-10-24：自绘 UNet U 形交互视图 + 5 张原理示意图，Node 48 项 / Python 144 项 / 黄金 3/3 与真实浏览器验证通过；待用户界面验收）；P4 完成（2026-10-25：节点零输出、`prepare_report`、删除图表链路与 numpy/matplotlib/Pillow 依赖、旧工作流两控件迁移；Python 138 / Node 48 / 报告 JSON 黄金 3/3；待用户界面验收）
+> 状态：**已批准（2026-10-24）**；P0 代码完成（含默认目录/英文调整）；P1 数据层完成；P2 服务层、报告页骨架与节点按钮完成（2026-10-24，按钮先重建报告再打开；待界面验收）；P3 完成（2026-10-24：自绘 UNet U 形交互视图 + 5 张原理示意图，Node 48 项 / Python 144 项 / 黄金 3/3 与真实浏览器验证通过；待用户界面验收）；P4 完成（2026-10-25：节点零输出、`prepare_report`、删除图表链路与 numpy/matplotlib/Pillow 依赖、旧工作流两控件迁移；Python 138 / Node 48 / 报告 JSON 黄金 3/3；待用户界面验收）；P4.1 完成（2026-10-26：报告页导出契约，当前视图/全部键 CSV、统一 `resolveKeyView`、文档与 63 项 Node 测试；待用户界面验收）
 > 日期：2026-10-24
 > 关联：1.3.0「模型目录」选择（PR #18）；README 待开发项「交互式组件浏览器」「参数差异比较」
 > 本文替代 v1 设计稿。按第 14 节拆 PR 实施。
@@ -79,7 +79,7 @@
 | 输入 | `model_dir`、`model_name`、`show_details`、`show_charts` | `model_dir`、`model_name` |
 | 输出 | `STRING` 分析报告、`IMAGE` 可视化图表 | **无输出**（`RETURN_TYPES = ()`） |
 | 执行语义 | 输出文字和图片 | 校验模型并预热报告缓存；按钮打开页面 |
-| 图表实现 | matplotlib（2048×1280 PNG） | 浏览器 ECharts / 自绘 SVG |
+| 图表实现 | matplotlib 静态图表 | 浏览器 ECharts / 自绘 SVG |
 | 文字报告 | 节点输出 | 页面「导出 Markdown」（前端生成） |
 | 依赖 | numpy、matplotlib、Pillow、safetensors、pyyaml | safetensors、pyyaml（其余移除） |
 | 版本 | 1.3.0 | **2.0.0** |
@@ -354,7 +354,7 @@ structure/
 │ 概览：组件环形图 + 参数条形图 + 架构能力提示                     │
 │ 架构：UNet 特化 U 形结构图（v1）                                 │
 │ 原理：Latent Diffusion / UNet 数据流 / ResBlock / SDXL 差异      │
-│ 键名：搜索 + dtype 过滤 + 排序 + 组件→块→层折叠树                │
+│ 键名：搜索 + 组件/dtype/注意力/块前缀过滤 + 排序 + 分页平面表          │
 │ 精度：分布饼图 + 每组件精度                                     │
 │ 元信息：键值表                                                  │
 │ 原始 JSON：只读 + 复制                                          │
@@ -420,19 +420,38 @@ latent ─ conv_in ─ [L0: Res, SA/CA] ─┐                  ┌─ [L2: Res,
 
 ### 8.4 键名浏览器
 
-- 树：组件 → 块（`input_blocks.3` / `down_blocks.1`）→ 其余路径；
-- 搜索：子串、忽略大小写、150 ms 防抖、命中高亮与计数；
-- 过滤：dtype、未归类、仅注意力层；
-- 排序：名称 / 参数量；
-- 渲染：默认折叠，按需展开；可见行超过 2,000 时窗口化；
-- 行内显示键名、shape、dtype、参数量；单击复制键名。
+- 单一平面表；不构建组件树，也没有折叠节点。大列表靠分页而不是窗口化。
+- 每页 50 / 100 / 250 行，`Previous` / `Next` 翻页；翻页只切当前视图的行切片，
+  不重新过滤或排序。
+- 筛选：搜索（子串、忽略大小写、150 ms 防抖）、组件、dtype、仅注意力层、
+  UNet 块前缀（从架构视图钻取）；排序：名称 A→Z / Z→A、参数高→低 / 低→高。
+- `report_logic.resolveKeyView(keys, filters, prefixes)` 是唯一计算入口，返回
+  `{rows, viewCount, totalKeys, prefixActive, narrowed}`：`rows` 是全部匹配行
+  （跨分页、已排序），`viewCount` 是当前视图行数，`totalKeys` 是报告全部键数。
+  表格、状态条、CSV 菜单与导出共用同一结果；空前缀列表表示不限制。
+- 状态条精确使用 `formatKeysStatus(view, page)`：无键名清单时为 `No key list`；
+  视图为空时为 `Showing 0 of M keys`；有筛选时为
+  `Showing start–end of N of M keys`；未收窄时为 `Showing start–end of M keys`。
+  数字使用千分位，范围分隔符为 U+2013。
+- 行内显示键名、shape、dtype、参数量；单击复制键名。无键名清单时两个 CSV
+  按钮禁用，JSON 与 Markdown 仍可用。
 
 ### 8.5 导出
 
-- JSON（完整报告）
-- CSV（键名表；单元格按 CSV 注入规则转义）
-- Markdown（前端生成：概览 + 组件 + 精度 + 元信息 + 可选键名）
-- SVG / PNG（当前体系结构图）
+- JSON（完整报告，含键名清单）
+- CSV · current view（默认）：当前搜索/组件/dtype/attention/块前缀筛选后的全部行，
+  按当前排序，跨分页取全集；文件名 `<stem>.keys.csv`
+- CSV · all keys：报告中的全部键，不受筛选或块前缀限制，只按当前排序；
+  文件名 `<stem>.all-keys.csv`
+- 两种 CSV 都由 `buildCsvExport` 生成；空视图返回 `EMPTY_VIEW` 且不产生只有表头的
+  文件，无键名清单返回 `NO_KEY_LIST`，未加载报告返回 `NO_REPORT`。单元格按 CSV
+  注入规则转义，行数等于 `recordCount + 1`，无尾换行。
+- Markdown（前端生成：概览 + 组件 + 精度 + 元信息；**不含键名章节**）
+- SVG（当前体系结构图；不提供位图导出）
+
+CSV 菜单文案由 `csvMenuLabels(view)` 统一生成，例如
+`Export keys CSV · current view (1,234 of 2,182)` 与
+`Export keys CSV · all keys (2,182)`；切换筛选后两个按钮同步刷新并遵循同一启停规则。
 
 ### 8.6 DiT / LLM 扩展点
 
@@ -464,7 +483,8 @@ latent ─ conv_in ─ [L0: Res, SA/CA] ─┐                  ┌─ [L2: Res,
 | `.ckpt/.pt` | 全量加载；首次可能数秒，必须缓存 |
 | 页面图表 | 浏览器端渲染；报告页不调用 matplotlib |
 | 页面体积 | ECharts 仅在报告页加载，不影响 ComfyUI 主界面启动 |
-| 键名渲染 | 按需展开 + 防抖 + 超 2,000 行窗口化 |
+| 键名视图 | 筛选/排序只在条件变化时调用一次 `resolveKeyView`；翻页仅做切片 |
+| CSV 导出 | 复用当前视图的已排序 `rows`；全部键导出仅额外排序一次 |
 | 路由线程 | `asyncio.to_thread`，不阻塞 ComfyUI Web 服务 |
 
 缓存：
@@ -477,7 +497,9 @@ latent ─ conv_in ─ [L0: Res, SA/CA] ─┐                  ┌─ [L2: Res,
 
 - SD1.5：数据请求 < 1 s（缓存命中 < 200 ms），首屏 < 2 s；
 - SDXL：数据 < 2 s，首屏 < 3 s；
-- 键名搜索 2,500 键：输入到结果 < 100 ms。
+- 键名搜索 2,500 键：输入到结果 < 100 ms；
+- `resolveKeyView`：100,000 个键的输入完成过滤与排序 ≤ 600 ms（本机 Node 24 基准）；
+- `buildCsvExport`：20,000 行 CSV 生成 ≤ 1,500 ms；翻页不触发重新计算。
 
 ---
 
@@ -548,10 +570,15 @@ ComfyUI 按位置保存 `widgets_values`。1.3.0（PR #18）把 `model_dir` 加�
 | 报告契约 | `schema_version`、字段类型、summary/keys 差异、路径不泄露 |
 | 路由 | 非法 `dir`/`model`、路径遍历、`keys=0/1`、错误码 |
 | 缓存 | 命中/失效（mtime/size 改变） |
-| 前端纯函数 | 分组/搜索/排序/CSV/Markdown 转义，`node --test` |
+| 前端纯函数 | `resolveKeyView` 跨分页/空前缀/非法输入、状态与菜单文案、CSV 文件名与失败计划、20k 行 CSV 与 100k 键性能；`node --test` |
+| 文档契约 | 设计文档只承诺 SVG 结构图、无键名可选章节；README 说明两个 CSV 范围与 Markdown 不含键名 |
 | 语法 | `node --check`、`py_compile` |
 | golden | 报告 JSON 规范化哈希；重构期间旧文本/图像 golden 作为过渡 |
 | 打包 | 依赖移除后 `requirements.txt` 与 `test_packaging.py` 一致 |
+
+当前前端测试共 63 项：控件迁移 12、报告 URL 7、报告页纯函数 26、UNet 视图 10、
+原理图联动 4、报告文档契约 4。CSV 契约覆盖跨分页全集、空前缀、非法输入、
+公式注入、状态/菜单精确文案、失败计划与性能预算；不修改 golden 基线。
 
 ### 13.2 用户验收（AI 不能代替）
 
@@ -560,7 +587,9 @@ ComfyUI 按位置保存 `widgets_values`。1.3.0（PR #18）把 `model_dir` 加�
 3. 换 SDXL 模型 → 显示 3 个 down 阶段、2 个 downsample、`label_emb`（尺寸条件）被识别。
 4. 点任一 ResBlock → 详情里能看到真实键名与参数量；点「在键名中查看」能过滤。
 5. 原理页四张图显示正常；引用可点击；灰显模块与本模型一致。
-6. 导出 JSON/CSV/Markdown/SVG 各一次，文件可正常打开。
+6. 导出 JSON/CSV（当前视图与全部键）/Markdown/SVG 各一次：当前视图 CSV 与表格
+   行数/顺序一致且跨分页完整；全部键 CSV 只按当前排序；空视图不下载；Markdown
+   不含键名；SVG 可正常打开（不提供位图）。
 7. 旧工作流（1.2.0 与 1.3.0 各一份）载入：控件不串位；2.0.0 后无输出节点，确认断开提示符合预期。
 8. `.ckpt` 模型首次打开与二次刷新耗时对比（缓存生效）。
 9. 安全回归：故意构造含 `<script>` 的元信息样本，页面只显示文本。
