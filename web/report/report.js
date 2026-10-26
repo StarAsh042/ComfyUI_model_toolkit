@@ -1,24 +1,25 @@
 import {
+    buildCsvExport,
     capabilitySummary,
     componentChartData,
+    csvMenuLabels,
     dtypesOf,
-    filterKeys,
     formatCount,
+    formatKeysStatus,
     formatParams,
     formatPercent,
     isAttentionKey,
-    keysToCsv,
     paginate,
     parseReportParams,
     precisionChartData,
     reportToMarkdown,
+    resolveKeyView,
     safeFilename,
     shapeLabel,
-    sortKeys,
     sourceDescription,
     sourceLabel,
 } from "./report_logic.js";
-import { UnetView, keysUnderPrefixes } from "./views/unet.js";
+import { UnetView } from "./views/unet.js";
 import { mountPrinciples } from "./principles/principles.js";
 
 const API_PATH = "/api/model_toolkit/report/data";
@@ -32,7 +33,7 @@ const PALETTE = ["#38bdf8", "#818cf8", "#34d399", "#fbbf24", "#fb7185", "#22d3ee
 const state = {
     report: null,
     keys: [],
-    filteredKeys: [],
+    keyView: null,
     page: 0,
     pageSize: 100,
     filters: {
@@ -71,13 +72,18 @@ function clear(node) {
     if (node) node.replaceChildren();
 }
 
+function disableExportControls() {
+    for (const button of document.querySelectorAll(".export-list button")) {
+        button.disabled = true;
+    }
+    $("copy-json").disabled = true;
+}
+
 function showLoading() {
     $("loading-state").hidden = false;
     $("error-state").hidden = true;
     $("report-view").hidden = true;
-    for (const id of ["export-json", "export-csv", "export-markdown", "copy-json"]) {
-        $(id).disabled = true;
-    }
+    disableExportControls();
 }
 
 function showError(message, code, options = {}) {
@@ -88,9 +94,7 @@ function showError(message, code, options = {}) {
     $("error-code").textContent = code || "";
     $("retry-button").hidden = options.retry === false;
     document.title = "Report unavailable · Model Toolkit";
-    for (const id of ["export-json", "export-csv", "export-markdown", "copy-json"]) {
-        $(id).disabled = true;
-    }
+    disableExportControls();
 }
 
 async function loadReport() {
@@ -179,10 +183,7 @@ function renderReport() {
     renderPrecision();
     renderMetadata();
     renderRawJson();
-
-    for (const id of ["export-json", "export-csv", "export-markdown"]) {
-        $(id).disabled = false;
-    }
+    syncExportControls();
 
     const hash = window.location.hash.replace(/^#/, "");
     const fallback = report.structure?.kind === "unet" ? "architecture" : "overview";
@@ -673,6 +674,20 @@ function clearPrefixFilter() {
     applyKeyFilters();
 }
 
+function syncExportControls() {
+    const hasReport = Boolean(state.report);
+    const hasKeys = hasReport && state.keys.length > 0;
+    $("export-json").disabled = !hasReport;
+    $("export-markdown").disabled = !hasReport;
+    $("export-csv").disabled = !hasKeys;
+    $("export-csv-all").disabled = !hasKeys;
+    if (state.keyView) {
+        const labels = csvMenuLabels(state.keyView);
+        $("export-csv").textContent = labels.currentView;
+        $("export-csv-all").textContent = labels.all;
+    }
+}
+
 function renderKeys() {
     const componentSelect = $("keys-component");
     const dtypeSelect = $("keys-dtype");
@@ -700,21 +715,6 @@ function renderKeys() {
     state.prefixFilter = [];
     state.prefixLabel = "";
     renderPrefixBar();
-
-    if (!state.keys.length) {
-        $("keys-status").textContent = "No key list";
-        $("keys-empty").hidden = false;
-        $("keys-empty").textContent = "This report does not include a key list.";
-        $("keys-table-wrap").hidden = true;
-        $("keys-pagination").hidden = true;
-        clear($("keys-body"));
-        $("keys-page-label").textContent = "";
-        return;
-    }
-
-    $("keys-empty").hidden = true;
-    $("keys-table-wrap").hidden = false;
-    $("keys-pagination").hidden = false;
     applyKeyFilters();
 }
 
@@ -728,9 +728,8 @@ function applyKeyFilters() {
         sort: $("keys-sort").value,
     };
     state.page = 0;
-    let keys = filterKeys(state.keys, state.filters);
-    if (state.prefixFilter.length) keys = keysUnderPrefixes(keys, state.prefixFilter);
-    state.filteredKeys = sortKeys(keys, state.filters.sort);
+    state.keyView = resolveKeyView(state.keys, state.filters, state.prefixFilter);
+    syncExportControls();
     renderKeyTable();
 }
 
@@ -762,14 +761,12 @@ function keyRow(key) {
 }
 
 function renderKeyTable() {
-    const page = paginate(state.filteredKeys, state.page, state.pageSize);
+    const view = state.keyView;
+    if (!view) return;
+    const page = paginate(view.rows, state.page, state.pageSize);
     state.page = page.page;
 
-    $("keys-status").textContent = page.total
-        ? `Showing ${formatCount(page.start + 1)}–${formatCount(page.end)} of ${formatCount(
-              page.total
-          )} keys`
-        : "No matching keys";
+    $("keys-status").textContent = formatKeysStatus(view, page);
     $("keys-page-label").textContent = `Page ${page.page + 1} of ${page.pageCount}`;
     $("keys-prev").disabled = page.page <= 0;
     $("keys-next").disabled = page.page >= page.pageCount - 1;
@@ -780,7 +777,10 @@ function renderKeyTable() {
 
     const hasRows = page.total > 0;
     $("keys-empty").hidden = hasRows;
-    $("keys-empty").textContent = "No keys match the current filters.";
+    $("keys-empty").textContent =
+        view.totalKeys === 0
+            ? "This report does not include a key list."
+            : "No keys match the current filters.";
     $("keys-table-wrap").hidden = !hasRows;
     $("keys-pagination").hidden = !hasRows;
 }
@@ -1123,14 +1123,20 @@ function exportJson() {
     showToast("JSON exported");
 }
 
-function exportCsv() {
-    if (!state.report) return;
-    downloadText(
-        safeFilename(state.report.summary.file_name, "keys.csv"),
-        keysToCsv(state.keys),
-        "text/csv;charset=utf-8"
-    );
-    showToast("CSV exported");
+function exportCsv(scope) {
+    const result = buildCsvExport({
+        report: state.report,
+        view: state.keyView,
+        scope,
+        keys: state.keys,
+        filters: state.filters,
+    });
+    if (!result.ok) {
+        showToast(result.notice);
+        return;
+    }
+    downloadText(result.fileName, result.csv, "text/csv;charset=utf-8");
+    showToast(result.notice);
 }
 
 function exportMarkdown() {
@@ -1228,7 +1234,8 @@ function init() {
         showToast(copied ? "Report JSON copied" : "Could not copy the JSON");
     });
     $("export-json").addEventListener("click", exportJson);
-    $("export-csv").addEventListener("click", exportCsv);
+    $("export-csv").addEventListener("click", () => exportCsv("view"));
+    $("export-csv-all").addEventListener("click", () => exportCsv("all"));
     $("export-markdown").addEventListener("click", exportMarkdown);
     for (const button of document.querySelectorAll(".export-list button")) {
         button.addEventListener("click", () => {

@@ -3,12 +3,16 @@ import {
     formatCount,
     formatParams,
     formatPercent,
+    keysUnderPrefixes,
+    normalizePrefix,
     ratioLabel,
     safeFilename,
     shapeLabel,
     sourceDescription,
     sourceLabel,
 } from "../report_logic.js";
+
+export { keysUnderPrefixes };
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PAD = 24;
@@ -38,12 +42,6 @@ export const UNET_METRICS = Object.freeze({
 });
 
 let instanceSeq = 0;
-
-function normalizePrefix(prefix) {
-    const text = String(prefix || "");
-    if (!text) return "";
-    return text.endsWith(".") ? text : `${text}.`;
-}
 
 export function defaultBaseSize(structure) {
     const size = Number(structure?.latent?.base_size);
@@ -76,15 +74,6 @@ export function stageKeyPrefixes(structure, stage) {
     return (stage?.blocks || [])
         .map((block) => keyPrefixForBlock(structure, block.id))
         .filter(Boolean);
-}
-
-export function keysUnderPrefixes(keys, prefixes) {
-    const normalized = (prefixes || []).map(normalizePrefix).filter(Boolean);
-    if (!normalized.length) return [];
-    return (keys || []).filter((key) => {
-        const name = String(key?.name || "");
-        return normalized.some((prefix) => name.startsWith(prefix));
-    });
 }
 
 export function findContextDim(structure) {

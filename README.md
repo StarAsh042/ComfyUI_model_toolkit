@@ -48,8 +48,15 @@
 - Architecture：自绘 SVG 的 UNet U 形结构图，支持阶段与块详情、跳连、
   文本/时间条件、缩放与导出 SVG、基础分辨率切换、宽屏模式
 - Principles：5 张原创原理示意图与论文引用，数值与当前模型联动
-- Keys：键名搜索、组件/精度/注意力过滤与排序，支持按 UNet 块前缀钻取
-- Precision / Metadata / Raw JSON；CSV、Markdown、JSON 导出
+- Keys：分页平面表，支持键名搜索、组件/精度/注意力过滤、排序与按 UNet 块前缀钻取；
+  状态条显示当前视图与全部键的数量关系
+- Precision / Metadata / Raw JSON
+- 导出：JSON；`Export keys CSV · current view`（默认，包含搜索/组件/dtype/attention/
+  块前缀与当前排序，跨分页取全集）；`Export keys CSV · all keys`（全部键，按当前排序）；
+  Markdown（摘要，不含键名）
+
+> Markdown 导出只包含概览、组件、精度与元信息，**不含键名章节**；1.x `Advanced`
+> 报告里的全量键名清单由 `Export keys CSV · all keys` 承接。
 
 > `.safetensors` 只读取文件头部（键名/形状/精度），**不加载权重**；`.ckpt/.pt` 因格式限制仍需全量加载。
 > 模型文件被同名覆盖或重新下载后，节点会依据文件指纹自动重算，不会返回旧报告。
